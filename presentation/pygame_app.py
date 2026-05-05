@@ -28,6 +28,7 @@ from presentation.audio.sound_manager import SoundManager
 from presentation.rendering.card_renderer import CardRenderer
 from presentation.scenes.end_scene import EndScene
 from presentation.scenes.game_scene import GameScene
+from presentation.scenes.instructions_scene import InstructionsScene
 from presentation.scenes.lobby_scene import LobbyScene
 from presentation.scenes.menu_scene import MenuScene
 from presentation.scenes.settings_scene import SettingsScene
@@ -37,14 +38,18 @@ from systems.ai.bot_player import BotPlayerController
 
 CARD_W = 94
 CARD_H = 132
-TABLE_GREEN = (213, 239, 224)
-PANEL = (250, 246, 235)
-PANEL_2 = (230, 244, 247)
-TEXT = (49, 61, 73)
-MUTED = (105, 121, 130)
-ACCENT = (238, 185, 145)
-BAD = (220, 119, 124)
-GOOD = (139, 202, 166)
+TABLE_GREEN = (204, 232, 216)
+TABLE_DARK = (78, 142, 122)
+PANEL = (255, 250, 241)
+PANEL_2 = (233, 245, 246)
+TEXT = (37, 47, 56)
+MUTED = (99, 115, 121)
+ACCENT = (232, 141, 105)
+ACCENT_2 = (82, 151, 171)
+BAD = (209, 91, 99)
+GOOD = (92, 169, 124)
+BORDER = (183, 204, 198)
+SHADOW = (52, 78, 72, 48)
 
 
 @dataclass
@@ -79,9 +84,12 @@ class InputBox:
 
     def draw(self, surface: pygame.Surface, font: pygame.font.Font, small: pygame.font.Font) -> None:
         border = ACCENT if self.active else (176, 197, 199)
-        pygame.draw.rect(surface, PANEL_2, self.rect, border_radius=6)
-        pygame.draw.rect(surface, border, self.rect, 2, border_radius=6)
-        surface.blit(small.render(self.label, True, MUTED), (self.rect.x, self.rect.y - 22))
+        shadow = pygame.Surface((self.rect.width + 8, self.rect.height + 8), pygame.SRCALPHA)
+        pygame.draw.rect(shadow, SHADOW, shadow.get_rect().move(4, 4), border_radius=8)
+        surface.blit(shadow, (self.rect.x - 4, self.rect.y - 4))
+        pygame.draw.rect(surface, (249, 253, 251), self.rect, border_radius=8)
+        pygame.draw.rect(surface, border, self.rect, 2, border_radius=8)
+        surface.blit(small.render(self.label.upper(), True, MUTED), (self.rect.x, self.rect.y - 23))
         clipped = self.value[-24:]
         surface.blit(font.render(clipped, True, TEXT), (self.rect.x + 12, self.rect.y + 10))
 
@@ -280,6 +288,7 @@ class PygameUnoApp:
         self.transition_alpha = 255
         self.click_feedback: list[tuple[tuple[int, int], float]] = []
         self.notice = ""
+        self.notice_overlay: str | None = None
         self.assets_root = Path(__file__).resolve().parents[2] / "assets"
         self.scenes = {
             "menu": MenuScene(self),
@@ -288,6 +297,7 @@ class PygameUnoApp:
             "game": GameScene(self),
             "end": EndScene(self),
             "settings": SettingsScene(self),
+            "instructions": InstructionsScene(self),
         }
 
     def run(self) -> None:
@@ -314,7 +324,7 @@ class PygameUnoApp:
                 self.running = False
                 continue
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                if self.mode in {"game", "host_room", "join_room", "settings"}:
+                if self.mode in {"game", "host_room", "join_room", "settings", "instructions"}:
                     self._go_menu()
                 else:
                     self.running = False
@@ -326,6 +336,7 @@ class PygameUnoApp:
         self.transition_alpha = max(0, self.transition_alpha - int(950 * dt))
         self.click_feedback = [(pos, age + dt) for pos, age in self.click_feedback if age + dt < 0.24]
         self._current_scene().update(dt)
+        self._handle_session_error()
 
     def _draw(self) -> None:
         assert self.screen is not None
@@ -347,28 +358,85 @@ class PygameUnoApp:
         self.buttons.clear()
         self.input_boxes.clear()
         self._draw_title("UNO Online")
-        x = 475
-        y = 230
-        self._add_button(x, y, 102, 48, "2P Local", "local", 2)
-        self._add_button(x + 114, y, 102, 48, "3P Local", "local", 3)
-        self._add_button(x + 228, y, 102, 48, "4P Local", "local", 4)
-        self._add_button(x, y + 62, 159, 48, "1P + Bot", "local", (2, 1))
-        self._add_button(x + 171, y + 62, 159, 48, "1P + 3 Bots", "local", (4, 3))
-        self._add_button(x, y + 124, 330, 48, "Host Relay Room", "host_room")
-        self._add_button(x, y + 186, 330, 48, "Join Relay Code", "join_room")
-        self._add_button(x, y + 248, 330, 48, "Settings", "settings")
-        self._draw_buttons()
-        self._draw_text("Online play uses a relay room code. Players never connect directly to the host.", 640, 670, MUTED, center=True)
+
+        hero = pygame.Rect(76, 124, 430, 500)
+        menu = pygame.Rect(548, 124, 656, 500)
+        self._draw_panel(hero, (251, 248, 236))
+        self._draw_panel(menu, PANEL)
+
+        self._draw_text("Fast local play", 116, 170, TEXT, size="big")
+        self._draw_text("or relay-hosted rooms", 118, 218, MUTED)
+        self._draw_chip("Hotseat", 118, 274, ACCENT_2)
+        self._draw_chip("Bots", 230, 274, GOOD)
+        self._draw_chip("Room Code", 315, 274, ACCENT)
+        self._draw_menu_cards()
+        self._draw_text("Match color or rank, stack draw cards, and use special 0/7/8 rules.", 118, 560, MUTED, size="small")
+
+        self._draw_text("Choose Mode", 602, 168, TEXT, size="big")
+        self._draw_text("Local games start immediately. Relay games need the relay server running.", 604, 214, MUTED)
+        x = 604
+        y = 258
+        self._add_button(x, y, 126, 48, "2P Local", "local", 2)
+        self._add_button(x + 138, y, 126, 48, "3P Local", "local", 3)
+        self._add_button(x + 276, y, 126, 48, "4P Local", "local", 4)
+        self._add_button(x, y + 64, 195, 48, "1P + Bot", "local", (2, 1))
+        self._add_button(x + 207, y + 64, 195, 48, "1P + 3 Bots", "local", (4, 3))
+        self._add_button(x, y + 146, 402, 50, "Host Relay Room", "host_room")
+        self._add_button(x, y + 208, 402, 50, "Join Relay Code", "join_room")
+        self._add_button(x, y + 286, 195, 48, "Instructions", "instructions")
+        self._add_button(x + 207, y + 286, 195, 48, "Settings", "settings")
+        self._draw_text("Online play uses a relay room code. Players never connect directly to the host.", 640, 676, MUTED, center=True, size="small")
         if self.notice:
             self._draw_text(self.notice, 640, 696, BAD, center=True)
+        if not self.notice_overlay:
+            self._draw_buttons()
+        self._draw_notice_overlay()
+
+    def _draw_instructions(self) -> None:
+        assert self.screen is not None
+        self.buttons.clear()
+        self.input_boxes.clear()
+        self._draw_title("Instructions")
+        self._add_button(28, 22, 92, 34, "Back", "menu")
+
+        left_panel = pygame.Rect(76, 216, 546, 408)
+        right_panel = pygame.Rect(658, 216, 546, 408)
+        self._draw_panel(left_panel, PANEL)
+        self._draw_panel(right_panel, PANEL_2)
+
+        self._draw_chip("Flow", 116, 248, ACCENT_2)
+        self._draw_text("How To Play", 116, 288, TEXT, size="big")
+        rules = [
+            "Match the discard pile by color or rank. Wild cards can be played on any color.",
+            "Click a playable card in your hand. Dimmed cards are not legal for the current turn.",
+            "If you cannot play, click Draw. After drawing, play the drawn card if it is legal or click Pass.",
+            "When a draw penalty is active, you must stack a +2 or +4 with equal or higher value, otherwise draw the penalty.",
+            "First player with no cards wins. Action cards cannot be played as your final card.",
+        ]
+        self._draw_wrapped_lines(rules, 116, 340, 460, 26, TEXT, size="small")
+
+        self._draw_chip("Cards", 698, 248, ACCENT)
+        self._draw_text("Card Meanings", 698, 288, TEXT, size="big")
+        cards = [
+            "0: choose clockwise or counter-clockwise, then all players pass hands in that direction.",
+            "7: choose another player and swap hands with them.",
+            "8: starts a reaction round. Players hit React; the last or missing responder is punished.",
+            "Skip: the next player loses their turn.",
+            "Reverse: changes the turn direction.",
+            "+2: adds two cards to the pending draw penalty.",
+            "Wild: choose the active color.",
+            "Wild +4: choose the active color and adds four cards to the pending draw penalty.",
+        ]
+        self._draw_wrapped_lines(cards, 698, 340, 464, 24, TEXT, size="small")
+        self._draw_buttons()
 
     def _draw_settings(self) -> None:
         assert self.screen is not None
         self.buttons.clear()
         self.input_boxes.clear()
         self._draw_title("Settings")
-        panel = pygame.Rect(375, 220, 530, 320)
-        pygame.draw.rect(self.screen, PANEL, panel, border_radius=8)
+        panel = pygame.Rect(350, 210, 580, 360)
+        self._draw_panel(panel, PANEL)
         rows = [
             ("Sound", "sound_enabled", "On" if self.user_settings.sound_enabled else "Off"),
             ("Volume", "volume", f"{int(self.user_settings.volume * 100)}%"),
@@ -376,18 +444,20 @@ class PygameUnoApp:
             ("Missing Card Labels", "show_missing_card_labels", "On" if self.user_settings.show_missing_card_labels else "Off"),
             ("Fullscreen", "fullscreen", "On" if self.user_settings.fullscreen else "Off"),
         ]
-        y = 252
+        y = 248
         for label, key, value in rows:
-            self._draw_text(label, 420, y + 8, TEXT)
-            self._draw_text(value, 668, y + 8, MUTED)
+            row_rect = pygame.Rect(386, y - 4, 508, 46)
+            pygame.draw.rect(self.screen, (250, 253, 249), row_rect, border_radius=8)
+            self._draw_text(label, 410, y + 8, TEXT)
+            self._draw_chip(value, 632, y + 1, GOOD if value == "On" else MUTED, width=78)
             if key == "volume":
-                self._add_button(735, y, 42, 38, "-", "volume_down")
-                self._add_button(790, y, 42, 38, "+", "volume_up")
+                self._add_button(740, y, 42, 38, "-", "volume_down")
+                self._add_button(794, y, 42, 38, "+", "volume_up")
             else:
-                self._add_button(735, y, 97, 38, "Toggle", f"toggle_{key}")
+                self._add_button(740, y, 112, 38, "Toggle", f"toggle_{key}")
             y += 55
-        self._add_button(420, 570, 185, 44, "Save", "save_settings")
-        self._add_button(620, 570, 185, 44, "Back", "menu")
+        self._add_button(410, 592, 205, 44, "Save", "save_settings")
+        self._add_button(666, 592, 205, 44, "Back", "menu")
         self._draw_text("Settings are saved to config/user_settings.json.", 640, 640, MUTED, center=True)
         if self.notice:
             self._draw_text(self.notice, 640, 670, GOOD, center=True)
@@ -399,21 +469,23 @@ class PygameUnoApp:
         if not self.input_boxes:
             if self.mode == "host_room":
                 self.input_boxes = [
-                    InputBox(pygame.Rect(420, 260, 440, 42), "Name", "Host"),
-                    InputBox(pygame.Rect(420, 340, 440, 42), "Relay Host", "127.0.0.1"),
+                    InputBox(pygame.Rect(420, 276, 440, 46), "Name", "Player 1"),
+                    InputBox(pygame.Rect(420, 358, 440, 46), "Relay Host", "127.0.0.1"),
                 ]
             else:
                 self.input_boxes = [
-                    InputBox(pygame.Rect(420, 240, 440, 42), "Name", "Player"),
-                    InputBox(pygame.Rect(420, 315, 440, 42), "Relay Host", "127.0.0.1"),
-                    InputBox(pygame.Rect(420, 390, 440, 42), "Room Code", ""),
+                    InputBox(pygame.Rect(420, 244, 440, 46), "Name", "Player"),
+                    InputBox(pygame.Rect(420, 326, 440, 46), "Relay Host", "127.0.0.1"),
+                    InputBox(pygame.Rect(420, 408, 440, 46), "Room Code", ""),
                 ]
         self._draw_title("Host Game" if self.mode == "host_room" else "Join Game")
+        form_panel = pygame.Rect(360, 210, 560, 330)
+        self._draw_panel(form_panel, PANEL)
         font, small, _big = self._fonts()
         for box in self.input_boxes:
             box.draw(self.screen, font, small)
-        self._add_button(420, 470, 210, 46, "Create" if self.mode == "host_room" else "Connect", "connect")
-        self._add_button(650, 470, 210, 46, "Back", "menu")
+        self._add_button(420, 486, 210, 46, "Create" if self.mode == "host_room" else "Connect", "connect")
+        self._add_button(650, 486, 210, 46, "Back", "menu")
         self._draw_buttons()
         if self.notice:
             self._draw_text(self.notice, 640, 560, BAD, center=True)
@@ -441,7 +513,7 @@ class PygameUnoApp:
         self._draw_text(f"Turn: {current_name}", 640, 34, TEXT, center=True)
         self._draw_text(f"Direction: {state.get('direction')}  Phase: {phase}", 640, 62, MUTED, center=True)
         if isinstance(self.session, OnlineGameSession) and self.session.room_code:
-            self._draw_text(f"Room code: {self.session.room_code}", 1020, 34, ACCENT)
+            self._draw_chip(f"Room {self.session.room_code}", 1042, 30, ACCENT, width=180)
 
         my_player = next((player for player in players if player.get("id") == me), None)
         hand = list(my_player.get("hand", [])) if my_player else []
@@ -466,7 +538,7 @@ class PygameUnoApp:
 
         self._draw_prompt(state)
         if self.session and self.session.can_start_game and phase in {"menu", "lobby", "playing"}:
-            self._add_button(1068, 22, 154, 34, "Host Settings", "host_settings")
+            self._add_button(1055, 122, 154, 36, "Host Settings", "host_settings")
         if self.host_settings_open:
             self._draw_host_settings(state)
         self._add_button(28, 22, 92, 34, "Menu", "menu")
@@ -477,40 +549,49 @@ class PygameUnoApp:
 
     def _draw_game_frame(self, state: dict[str, Any] | None) -> None:
         assert self.screen is not None
-        pygame.draw.rect(self.screen, (199, 231, 218), pygame.Rect(0, 0, 1280, 92))
-        pygame.draw.rect(self.screen, PANEL, pygame.Rect(22, 104, 245, 470), border_radius=8)
-        pygame.draw.rect(self.screen, PANEL, pygame.Rect(1014, 104, 244, 470), border_radius=8)
-        pygame.draw.rect(self.screen, (226, 244, 236), pygame.Rect(0, 584, 1280, 136))
+        pygame.draw.rect(self.screen, (222, 241, 232), pygame.Rect(0, 0, 1280, 92))
+        pygame.draw.line(self.screen, BORDER, (0, 92), (1280, 92), 2)
+        self._draw_panel(pygame.Rect(22, 104, 245, 470), PANEL)
+        self._draw_panel(pygame.Rect(1014, 104, 244, 470), PANEL)
+        pygame.draw.rect(self.screen, (229, 244, 237), pygame.Rect(0, 584, 1280, 136))
+        pygame.draw.line(self.screen, BORDER, (0, 584), (1280, 584), 2)
+        pygame.draw.ellipse(self.screen, (179, 220, 202), pygame.Rect(364, 130, 550, 310), 3)
         if self.session:
-            self._draw_text(self.session.info, 1020, 64, MUTED)
+            self._draw_text(self.session.info, 1020, 64, MUTED, size="small")
 
     def _draw_players(self, players: list[dict[str, Any]], current: str | None, me: str | None) -> None:
         self._draw_text("Players", 42, 124, TEXT)
-        y = 164
+        y = 162
         for player in players:
             active = player.get("id") == current
             mine = player.get("id") == me
+            row = pygame.Rect(38, y - 8, 205, 32)
+            if active:
+                pygame.draw.rect(self.screen, (255, 237, 225), row, border_radius=8)
+                pygame.draw.rect(self.screen, ACCENT, row, 2, border_radius=8)
             color = ACCENT if active else TEXT
             tag = "YOU" if mine else ("BOT" if player.get("is_bot") else ("OFF" if not player.get("connected", True) else ""))
-            label = f"{player.get('name')}  {player.get('card_count')} cards {tag}"
-            self._draw_text(label, 42, y, color)
-            y += 34
+            label = f"{player.get('name')}  {player.get('card_count')}"
+            self._draw_text(label, 48, y, color, size="small")
+            if tag:
+                self._draw_chip(tag, 172, y - 5, GOOD if tag == "YOU" else ACCENT_2 if tag == "BOT" else BAD, width=52)
+            y += 38
 
     def _draw_center_pile(self, top_card: dict[str, str] | None, active_color: str | None, pending_draw: int) -> None:
         assert self.screen is not None
         assert self.card_renderer is not None
-        pile = pygame.Rect(575, 190, CARD_W + 18, CARD_H + 18)
-        pygame.draw.rect(self.screen, (246, 238, 225), pile, border_radius=12)
+        pile = pygame.Rect(565, 178, CARD_W + 38, CARD_H + 38)
+        self._draw_panel(pile, (252, 244, 232), radius=10)
         if top_card:
             card = card_from_dict(top_card)
-            self.card_renderer.draw_card(self.screen, card, pygame.Rect(584, 199, CARD_W, CARD_H))
-        self._draw_card_back(pygame.Rect(462, 199, CARD_W, CARD_H))
+            self.card_renderer.draw_card(self.screen, card, pygame.Rect(584, 197, CARD_W, CARD_H))
+        self._draw_card_back(pygame.Rect(450, 197, CARD_W, CARD_H))
         if active_color:
             color = color_tuple(active_color)
-            pygame.draw.circle(self.screen, color, (704, 238), 18)
-            pygame.draw.circle(self.screen, TEXT, (704, 238), 18, 2)
+            pygame.draw.circle(self.screen, color, (714, 230), 20)
+            pygame.draw.circle(self.screen, TEXT, (714, 230), 20, 2)
         if pending_draw:
-            self._draw_text(f"+{pending_draw}", 708, 288, BAD, center=True, size="big")
+            self._draw_chip(f"+{pending_draw}", 690, 282, BAD, width=64)
 
     def _draw_hand(self, hand: list[dict[str, str]], state: dict[str, Any], can_play: bool) -> None:
         assert self.screen is not None
@@ -528,6 +609,9 @@ class PygameUnoApp:
             playable = can_play and is_card_playable(card_data, state)
             hover = rect.collidepoint(mouse) and playable
             draw_rect = rect.move(0, -16 if hover else 0)
+            if hover:
+                halo = draw_rect.inflate(10, 10)
+                pygame.draw.rect(self.screen, ACCENT, halo, 3, border_radius=12)
             self.card_renderer.draw_card(self.screen, card_from_dict(card_data), draw_rect)
             if not playable:
                 dim = pygame.Surface((draw_rect.width, draw_rect.height), pygame.SRCALPHA)
@@ -579,9 +663,9 @@ class PygameUnoApp:
     def _draw_overlay(self, title: str) -> None:
         assert self.screen is not None
         overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 150))
+        overlay.fill((24, 40, 37, 154))
         self.screen.blit(overlay, (0, 0))
-        pygame.draw.rect(self.screen, PANEL, pygame.Rect(360, 300, 560, 190), border_radius=8)
+        self._draw_panel(pygame.Rect(360, 300, 560, 190), PANEL)
         self._draw_text(title, 640, 332, TEXT, center=True, size="big")
 
     def _draw_card_back(self, rect: pygame.Rect) -> None:
@@ -600,6 +684,7 @@ class PygameUnoApp:
 
     def _draw_background(self, name: str) -> None:
         assert self.screen is not None
+        self._draw_table_texture()
         if self.card_renderer is None:
             return
         if not self.user_settings.show_background_art:
@@ -609,27 +694,78 @@ class PygameUnoApp:
         if image is None:
             return
         scaled = pygame.transform.smoothscale(image, self.screen.get_size())
-        scaled.set_alpha(55 if name == "table_background" else 80)
+        scaled.set_alpha(34 if name == "table_background" else 46)
         self.screen.blit(scaled, (0, 0))
 
     def _draw_title(self, title: str) -> None:
         self._draw_text(title, 640, 130, TEXT, center=True, size="big")
-        self._draw_text("Host-authoritative rules, online commands, card assets", 640, 174, MUTED, center=True)
+        self._draw_text("Host-authoritative UNO with local play, bots, and relay room codes", 640, 174, MUTED, center=True)
 
     def _draw_buttons(self) -> None:
         assert self.screen is not None
-        font, _small, _big = self._fonts()
+        font, small, _big = self._fonts()
         mouse = pygame.mouse.get_pos()
         for button in self.buttons:
             draw_rect = button.rect
-            color = (240, 232, 220) if button.enabled else (224, 224, 218)
-            if button.enabled and draw_rect.collidepoint(mouse):
-                color = (246, 218, 194)
-                draw_rect = draw_rect.inflate(2, 2)
-            pygame.draw.rect(self.screen, color, draw_rect, border_radius=6)
-            pygame.draw.rect(self.screen, ACCENT if button.enabled else (184, 190, 188), draw_rect, 2, border_radius=6)
-            label = font.render(button.label, True, TEXT if button.enabled else MUTED)
+            hovered = button.enabled and draw_rect.collidepoint(mouse)
+            base = (248, 239, 226) if button.enabled else (229, 230, 225)
+            color = (255, 232, 213) if hovered else base
+            shadow = pygame.Surface((draw_rect.width + 8, draw_rect.height + 8), pygame.SRCALPHA)
+            pygame.draw.rect(shadow, SHADOW if button.enabled else (0, 0, 0, 24), shadow.get_rect().move(4, 4), border_radius=8)
+            self.screen.blit(shadow, (draw_rect.x - 4, draw_rect.y - 4))
+            pygame.draw.rect(self.screen, color, draw_rect, border_radius=8)
+            border = ACCENT if button.enabled else (184, 190, 188)
+            pygame.draw.rect(self.screen, border, draw_rect, 2, border_radius=8)
+            selected_font = small if font.size(button.label)[0] > draw_rect.width - 22 else font
+            label = selected_font.render(button.label, True, TEXT if button.enabled else MUTED)
             self.screen.blit(label, label.get_rect(center=draw_rect.center))
+
+    def _draw_panel(
+        self,
+        rect: pygame.Rect,
+        color: tuple[int, int, int],
+        border: tuple[int, int, int] = BORDER,
+        radius: int = 8,
+    ) -> None:
+        assert self.screen is not None
+        shadow = pygame.Surface((rect.width + 14, rect.height + 14), pygame.SRCALPHA)
+        pygame.draw.rect(shadow, SHADOW, pygame.Rect(7, 8, rect.width, rect.height), border_radius=radius)
+        self.screen.blit(shadow, (rect.x - 7, rect.y - 7))
+        pygame.draw.rect(self.screen, color, rect, border_radius=radius)
+        pygame.draw.rect(self.screen, border, rect, 1, border_radius=radius)
+
+    def _draw_chip(self, label: str, x: int, y: int, color: tuple[int, int, int], width: int | None = None) -> None:
+        assert self.screen is not None
+        _font, small, _big = self._fonts()
+        chip_width = width or max(74, small.size(label)[0] + 24)
+        rect = pygame.Rect(x, y, chip_width, 26)
+        fill = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(fill, (*color, 42), fill.get_rect(), border_radius=8)
+        self.screen.blit(fill, rect.topleft)
+        pygame.draw.rect(self.screen, color, rect, 1, border_radius=8)
+        text = small.render(label, True, TEXT)
+        self.screen.blit(text, text.get_rect(center=rect.center))
+
+    def _draw_table_texture(self) -> None:
+        assert self.screen is not None
+        self.screen.fill(TABLE_GREEN)
+        for x in range(0, 1280, 64):
+            pygame.draw.line(self.screen, (190, 224, 210), (x, 0), (x + 160, 720), 1)
+        for y in range(36, 720, 72):
+            pygame.draw.line(self.screen, (219, 239, 229), (0, y), (1280, y - 32), 1)
+
+    def _draw_menu_cards(self) -> None:
+        assert self.screen is not None
+        cards = [
+            (pygame.Rect(166, 352, CARD_W, CARD_H), "red"),
+            (pygame.Rect(238, 330, CARD_W, CARD_H), "blue"),
+            (pygame.Rect(310, 352, CARD_W, CARD_H), "green"),
+        ]
+        for rect, color in cards:
+            pygame.draw.rect(self.screen, color_tuple(color), rect, border_radius=12)
+            pygame.draw.rect(self.screen, (255, 255, 250), rect.inflate(-12, -12), 3, border_radius=10)
+            pygame.draw.ellipse(self.screen, (255, 255, 250), rect.inflate(-26, -56))
+        self._draw_text("UNO", 285, 402, TEXT, center=True, size="big")
 
     def _draw_click_feedback(self) -> None:
         if not self.click_feedback or self.screen is None:
@@ -688,6 +824,35 @@ class PygameUnoApp:
             rect.topleft = (x, y)
         self.screen.blit(surface, rect)
 
+    def _draw_wrapped_lines(
+        self,
+        lines: list[str],
+        x: int,
+        y: int,
+        width: int,
+        line_height: int,
+        color: tuple[int, int, int],
+        size: str = "normal",
+    ) -> None:
+        font, small, _big = self._fonts()
+        selected = small if size == "small" else font
+        current_y = y
+        for line in lines:
+            words = line.split()
+            current = "- "
+            for word in words:
+                candidate = f"{current}{word} "
+                if selected.size(candidate)[0] <= width:
+                    current = candidate
+                    continue
+                self._draw_text(current.rstrip(), x, current_y, color, size=size)
+                current_y += line_height
+                current = f"  {word} "
+            if current.strip():
+                self._draw_text(current.rstrip(), x, current_y, color, size=size)
+                current_y += line_height
+            current_y += 8
+
     def _fonts(self) -> tuple[pygame.font.Font, pygame.font.Font, pygame.font.Font]:
         # Optional asset: add assets/fonts/Inter-Regular.ttf for a custom UI font.
         font_path = self.assets_root / "fonts" / "Inter-Regular.ttf"
@@ -722,6 +887,14 @@ class PygameUnoApp:
             self.notice = ""
         elif action == "settings":
             self._set_mode("settings")
+            self.notice = ""
+            self.notice_overlay = None
+        elif action == "instructions":
+            self._set_mode("instructions")
+            self.notice = ""
+            self.notice_overlay = None
+        elif action == "dismiss_notice":
+            self.notice_overlay = None
             self.notice = ""
         elif action == "host_settings":
             self.host_settings_open = True
@@ -825,6 +998,7 @@ class PygameUnoApp:
         self.pending_color = None
         self.pending_pass_direction = None
         self.host_settings_open = False
+        self.notice_overlay = None
         self._set_mode("menu")
 
     def _close_session(self) -> None:
@@ -838,6 +1012,32 @@ class PygameUnoApp:
         scene = self.scenes.get(mode)
         if scene is not None:
             scene.enter()
+
+    def _handle_session_error(self) -> None:
+        if self.mode != "game" or not isinstance(self.session, OnlineGameSession):
+            return
+        error = self.session.error
+        if not error:
+            return
+        if error.strip().lower() == "room is full":
+            self._go_menu()
+            self.notice = "room is full"
+            self.notice_overlay = "room is full"
+
+    def _draw_notice_overlay(self) -> None:
+        if not self.notice_overlay or self.screen is None:
+            return
+        overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+        overlay.fill((24, 40, 37, 84))
+        self.screen.blit(overlay, (0, 0))
+        self.buttons.clear()
+        panel = pygame.Rect(410, 246, 460, 190)
+        self._draw_panel(panel, PANEL)
+        self._draw_chip("Notice", 584, 272, BAD, width=112)
+        self._draw_text(self.notice_overlay, 640, 336, TEXT, center=True, size="big")
+        self._draw_text("Please choose another room or ask the host to increase max players.", 640, 382, MUTED, center=True, size="small")
+        self._add_button(565, 414, 150, 42, "OK", "dismiss_notice")
+        self._draw_buttons()
 
     def _adjust_host_max_players(self, delta: int) -> None:
         if not isinstance(self.session, OnlineGameSession) or not self.session.is_host:
@@ -886,7 +1086,6 @@ class PygameUnoApp:
             if player.get("id") == player_id:
                 return str(player.get("name"))
         return "None"
-
 
 def card_from_dict(data: dict[str, str]) -> Card:
     return Card(data["id"], CardColor(data["color"]), CardRank(data["rank"]))
