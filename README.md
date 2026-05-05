@@ -11,7 +11,8 @@ python main.py
 ```
 
 The pygame app includes local hotseat, bot games, relay-hosted room codes, and room-code join.
-Use the Settings page from the main menu to toggle sound, adjust volume, enable/disable placeholder background art, show/hide missing-card labels, and switch fullscreen.
+Use the Instructions page from the main menu to learn the game flow and card meanings.
+Use the Settings page to toggle sound, adjust volume, enable/disable placeholder background art, show/hide missing-card labels, and switch fullscreen.
 
 Install dependency if needed:
 
@@ -83,10 +84,19 @@ See `assets/README.md` for every supported and optional asset filename.
 The pygame app delegates lifecycle work to scene classes:
 
 - `presentation/scenes/menu_scene.py`: main mode selection
-- `presentation/scenes/lobby_scene.py`: relay room creation and room-code join forms
+- `presentation/scenes/instructions_scene.py`: how-to-play and card meaning guide
+- `presentation/scenes/lobby_scene.py`: direct and room-code join forms
 - `presentation/scenes/settings_scene.py`: sound, volume, display, and visual helper settings
 - `presentation/scenes/game_scene.py`: active table, hand, draw/play/react controls
 - `presentation/scenes/end_scene.py`: endgame overlay flow
+
+## Where To Improve UI
+
+- `presentation/pygame_app.py`: shared colors, font sizes, buttons, text helpers, and most screen drawing methods.
+- `presentation/scenes/`: scene entry points. Add a scene here when you want a new page.
+- `presentation/ui/components/`: reusable UI widgets such as buttons, cards, player panels, and reaction controls.
+- `presentation/rendering/`: card rendering, card images, backgrounds, and animations.
+- `assets/`: replace or add images, fonts, backgrounds, card art, and sounds.
 
 ## Playable-Ready Coverage
 

@@ -28,6 +28,10 @@ class GameClient:
     def disconnect(self) -> None:
         self._running = False
         if self.socket is not None:
+            try:
+                self.socket.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
             self.socket.close()
 
     def send(self, message: NetworkMessage) -> None:

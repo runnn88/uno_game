@@ -143,7 +143,7 @@ class RelayServer:
         player_id = "p1"
         room = RelayRoom(code=code, host_player_id=player_id)
         room.state.phase = GamePhase.LOBBY
-        room.state.players.append(Player(player_id, self._clean_name(name, 1)))
+        room.state.players.append(Player(player_id, self._unique_name(room, name, 1)))
         room.clients[conn] = player_id
         self.rooms[code] = room
         self.client_rooms[conn] = code
@@ -161,9 +161,9 @@ class RelayServer:
         if room.lobby_locked:
             raise ValueError("The lobby is locked")
         if len([player for player in room.state.players if player.connected]) >= room.max_players:
-            raise ValueError("The room is full")
+            raise ValueError("room is full")
         player_id = f"p{len(room.state.players) + 1}"
-        room.state.players.append(Player(player_id, self._clean_name(name, len(room.state.players) + 1)))
+        room.state.players.append(Player(player_id, self._unique_name(room, name, len(room.state.players) + 1)))
         room.clients[conn] = player_id
         self.client_rooms[conn] = room.code
         send_message(conn, NetworkMessage.of(MessageType.PLAYER_JOINED, {"player_id": player_id}))
@@ -196,10 +196,13 @@ class RelayServer:
                 room = self.rooms[room_code]
                 player_id = room.clients.pop(conn, None)
                 if player_id is not None:
-                    try:
-                        room.state.player_by_id(player_id).connected = False
-                    except ValueError:
-                        pass
+                    if room.state.phase in {GamePhase.MENU, GamePhase.LOBBY}:
+                        self._remove_lobby_player(room, player_id)
+                    else:
+                        try:
+                            room.state.player_by_id(player_id).connected = False
+                        except ValueError:
+                            pass
                     if room.state.phase == GamePhase.PLAYING:
                         self._repair_turn_after_disconnect(room, player_id)
                     self._broadcast_state(room)
@@ -221,6 +224,11 @@ class RelayServer:
             room.state.turn.skip_next = False
             self.turns.advance(room.state)
 
+    def _remove_lobby_player(self, room: RelayRoom, player_id: str) -> None:
+        room.state.players = [player for player in room.state.players if player.id != player_id]
+        if room.host_player_id == player_id and room.clients:
+            room.host_player_id = next(iter(room.clients.values()))
+
     def _room_for(self, conn: socket.socket) -> RelayRoom:
         code = self.client_rooms.get(conn)
         if code is None or code not in self.rooms:
@@ -235,7 +243,25 @@ class RelayServer:
                 return code
 
     def _clean_name(self, name: str, index: int) -> str:
-        return str(name).strip()[:18] or f"Player {index}"
+        cleaned = str(name).strip()[:18]
+        if self._is_default_name(cleaned):
+            return f"Player {index}"
+        return cleaned
+
+    def _unique_name(self, room: RelayRoom, name: str, index: int) -> str:
+        base = self._clean_name(name, index)
+        existing = {player.name for player in room.state.players}
+        if base not in existing:
+            return base
+        for suffix in range(2, MAX_PLAYERS + 2):
+            candidate = f"{base[:14]} #{suffix}"
+            if candidate not in existing:
+                return candidate
+        return f"Player {index}"
+
+    def _is_default_name(self, name: str) -> bool:
+        normalized = name.strip().lower()
+        return normalized in {"", "host", "player", "player 0"}
 
     def _send_error(self, conn: socket.socket, message: str) -> None:
         try:

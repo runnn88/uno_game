@@ -90,6 +90,128 @@ class NetworkTests(unittest.TestCase):
             guest.disconnect()
             relay.stop()
 
+    def test_relay_numbers_default_names_by_join_order(self) -> None:
+        relay = RelayServer(host="127.0.0.1", port=0)
+        thread = threading.Thread(target=relay.start, daemon=True)
+        thread.start()
+        while relay.port == 0:
+            time.sleep(0.01)
+
+        room_codes: list[str] = []
+        guest_states: list[dict] = []
+        host = GameClient(lambda message: room_codes.append(str(message.payload["room_code"])) if message.type.value == "ROOM_CREATED" else None)
+        guest = GameClient(lambda message: guest_states.append(message.payload) if message.type.value == "GAME_STATE" else None)
+        try:
+            host.connect_to_server("127.0.0.1", relay.port)
+            host.create_room("Host")
+            time.sleep(0.2)
+            guest.connect_to_server("127.0.0.1", relay.port)
+            guest.join_room(room_codes[-1], "Player")
+            time.sleep(0.2)
+
+            names = [player["name"] for player in guest_states[-1]["players"]]
+            self.assertEqual(names, ["Player 1", "Player 2"])
+        finally:
+            host.disconnect()
+            guest.disconnect()
+            relay.stop()
+
+    def test_relay_preserves_custom_player_names(self) -> None:
+        relay = RelayServer(host="127.0.0.1", port=0)
+        thread = threading.Thread(target=relay.start, daemon=True)
+        thread.start()
+        while relay.port == 0:
+            time.sleep(0.01)
+
+        room_codes: list[str] = []
+        guest_states: list[dict] = []
+        host = GameClient(lambda message: room_codes.append(str(message.payload["room_code"])) if message.type.value == "ROOM_CREATED" else None)
+        guest = GameClient(lambda message: guest_states.append(message.payload) if message.type.value == "GAME_STATE" else None)
+        try:
+            host.connect_to_server("127.0.0.1", relay.port)
+            host.create_room("Alice")
+            time.sleep(0.2)
+            guest.connect_to_server("127.0.0.1", relay.port)
+            guest.join_room(room_codes[-1], "Bob")
+            time.sleep(0.2)
+
+            names = [player["name"] for player in guest_states[-1]["players"]]
+            self.assertEqual(names, ["Alice", "Bob"])
+        finally:
+            host.disconnect()
+            guest.disconnect()
+            relay.stop()
+
+    def test_relay_reports_room_is_full(self) -> None:
+        relay = RelayServer(host="127.0.0.1", port=0)
+        thread = threading.Thread(target=relay.start, daemon=True)
+        thread.start()
+        while relay.port == 0:
+            time.sleep(0.01)
+
+        room_codes: list[str] = []
+        errors: list[str] = []
+        host = GameClient(lambda message: room_codes.append(str(message.payload["room_code"])) if message.type.value == "ROOM_CREATED" else None)
+        guest = GameClient()
+        extra = GameClient(lambda message: errors.append(str(message.payload.get("message", ""))) if message.type.value == "ERROR" else None)
+        try:
+            host.connect_to_server("127.0.0.1", relay.port)
+            host.create_room("Host")
+            time.sleep(0.2)
+            host.host_settings(max_players=2)
+            guest.connect_to_server("127.0.0.1", relay.port)
+            guest.join_room(room_codes[-1], "Player")
+            time.sleep(0.2)
+            extra.connect_to_server("127.0.0.1", relay.port)
+            extra.join_room(room_codes[-1], "Player")
+            time.sleep(0.2)
+
+            self.assertIn("room is full", errors)
+        finally:
+            host.disconnect()
+            guest.disconnect()
+            extra.disconnect()
+            relay.stop()
+
+    def test_relay_removes_lobby_player_and_reuses_default_slot(self) -> None:
+        relay = RelayServer(host="127.0.0.1", port=0)
+        thread = threading.Thread(target=relay.start, daemon=True)
+        thread.start()
+        while relay.port == 0:
+            time.sleep(0.01)
+
+        room_codes: list[str] = []
+        host_states: list[dict] = []
+        host = GameClient(
+            lambda message: room_codes.append(str(message.payload["room_code"]))
+            if message.type.value == "ROOM_CREATED"
+            else host_states.append(message.payload)
+            if message.type.value == "GAME_STATE"
+            else None
+        )
+        first_guest = GameClient()
+        second_guest = GameClient()
+        try:
+            host.connect_to_server("127.0.0.1", relay.port)
+            host.create_room("Host")
+            time.sleep(0.2)
+            first_guest.connect_to_server("127.0.0.1", relay.port)
+            first_guest.join_room(room_codes[-1], "Player")
+            time.sleep(0.2)
+            first_guest.disconnect()
+            time.sleep(0.2)
+            second_guest.connect_to_server("127.0.0.1", relay.port)
+            second_guest.join_room(room_codes[-1], "Player")
+            time.sleep(0.2)
+
+            names = [player["name"] for player in host_states[-1]["players"]]
+            self.assertEqual(names, ["Player 1", "Player 2"])
+        finally:
+            host.disconnect()
+            first_guest.disconnect()
+            second_guest.disconnect()
+            relay.stop()
+
 
 if __name__ == "__main__":
     unittest.main()
