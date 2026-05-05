@@ -1,7 +1,7 @@
-from uno_game.config.settings import DEFAULT_SETTINGS
-from uno_game.core.event_bus import EventBus
-from uno_game.core.game_loop import GameLoop
-from uno_game.core.state_manager import StateManager
+from config.settings import DEFAULT_SETTINGS
+from core.event_bus import EventBus
+from core.game_loop import GameLoop
+from core.state_manager import StateManager
 
 
 class App:
@@ -15,6 +15,6 @@ class App:
         self.events.emit("APP_TICK", {"dt": dt})
 
     def run(self) -> None:
-        from uno_game.presentation.pygame_app import PygameUnoApp
+        from presentation.pygame_app import PygameUnoApp
 
         PygameUnoApp().run()

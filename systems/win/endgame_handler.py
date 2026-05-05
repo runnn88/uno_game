@@ -1,5 +1,5 @@
-from uno_game.config.enums import GamePhase
-from uno_game.domain.state.game_state import GameState
+from config.enums import GamePhase
+from domain.state.game_state import GameState
 
 
 class EndgameHandler:

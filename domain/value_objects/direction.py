@@ -1,2 +1,2 @@
-from uno_game.config.enums import Direction
+from config.enums import Direction
 

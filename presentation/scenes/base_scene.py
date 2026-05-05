@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 if TYPE_CHECKING:
-    from uno_game.presentation.pygame_app import PygameUnoApp
+    from presentation.pygame_app import PygameUnoApp
 
 
 class BaseScene:

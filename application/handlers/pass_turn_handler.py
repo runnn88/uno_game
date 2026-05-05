@@ -1,7 +1,7 @@
-from uno_game.application.commands.pass_turn import PassTurnCommand
-from uno_game.core.event_bus import EventBus
-from uno_game.domain.state.game_state import GameState
-from uno_game.systems.turn.turn_manager import TurnManager
+from application.commands.pass_turn import PassTurnCommand
+from core.event_bus import EventBus
+from domain.state.game_state import GameState
+from systems.turn.turn_manager import TurnManager
 
 
 class PassTurnHandler:

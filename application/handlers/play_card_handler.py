@@ -1,9 +1,9 @@
-from uno_game.application.commands.play_card import PlayCardCommand
-from uno_game.core.event_bus import EventBus
-from uno_game.domain.state.game_state import GameState
-from uno_game.rules.engine import RuleEngine
-from uno_game.systems.turn.turn_manager import TurnManager
-from uno_game.systems.win.endgame_handler import EndgameHandler
+from application.commands.play_card import PlayCardCommand
+from core.event_bus import EventBus
+from domain.state.game_state import GameState
+from rules.engine import RuleEngine
+from systems.turn.turn_manager import TurnManager
+from systems.win.endgame_handler import EndgameHandler
 
 
 class PlayCardHandler:

@@ -1,5 +1,5 @@
-from uno_game.domain.state.game_state import GameState
-from uno_game.systems.turn.turn_order import TurnOrder
+from domain.state.game_state import GameState
+from systems.turn.turn_order import TurnOrder
 
 
 class TurnManager:

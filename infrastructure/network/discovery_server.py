@@ -4,9 +4,9 @@ import string
 import threading
 from collections.abc import Callable
 
-from uno_game.config.constants import DEFAULT_DISCOVERY_PORT, ROOM_CODE_LENGTH
-from uno_game.infrastructure.network.protocol import MessageType, NetworkMessage
-from uno_game.infrastructure.network.serializer import receive_message, send_message
+from config.constants import DEFAULT_DISCOVERY_PORT, ROOM_CODE_LENGTH
+from infrastructure.network.protocol import MessageType, NetworkMessage
+from infrastructure.network.serializer import receive_message, send_message
 
 
 class DiscoveryServer:

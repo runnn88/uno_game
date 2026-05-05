@@ -1,10 +1,10 @@
-from uno_game.application.commands.draw_card import DrawCardCommand
-from uno_game.application.commands.play_card import PlayCardCommand
-from uno_game.application.commands.react_event import ReactEventCommand
-from uno_game.application.handlers.draw_handler import DrawHandler
-from uno_game.application.handlers.play_card_handler import PlayCardHandler
-from uno_game.application.handlers.reaction_handler import ReactionHandler
-from uno_game.domain.state.game_state import GameState
+from application.commands.draw_card import DrawCardCommand
+from application.commands.play_card import PlayCardCommand
+from application.commands.react_event import ReactEventCommand
+from application.handlers.draw_handler import DrawHandler
+from application.handlers.play_card_handler import PlayCardHandler
+from application.handlers.reaction_handler import ReactionHandler
+from domain.state.game_state import GameState
 
 
 class LocalController:

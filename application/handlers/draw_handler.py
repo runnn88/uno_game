@@ -1,13 +1,13 @@
-from uno_game.application.commands.draw_card import DrawCardCommand
-from uno_game.application.commands.play_card import PlayCardCommand
-from uno_game.config.enums import CardColor, CardRank, PassDirection
-from uno_game.core.event_bus import EventBus
-from uno_game.domain.entities.player import Player
-from uno_game.domain.state.game_state import GameState
-from uno_game.rules.validator.card_playability import card_matches_state
-from uno_game.rules.validator.move_validator import MoveValidator
-from uno_game.systems.draw.draw_manager import DrawManager
-from uno_game.systems.turn.turn_manager import TurnManager
+from application.commands.draw_card import DrawCardCommand
+from application.commands.play_card import PlayCardCommand
+from config.enums import CardColor, CardRank, PassDirection
+from core.event_bus import EventBus
+from domain.entities.player import Player
+from domain.state.game_state import GameState
+from rules.validator.card_playability import card_matches_state
+from rules.validator.move_validator import MoveValidator
+from systems.draw.draw_manager import DrawManager
+from systems.turn.turn_manager import TurnManager
 
 
 class DrawHandler:

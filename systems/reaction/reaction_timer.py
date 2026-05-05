@@ -1,6 +1,6 @@
 from time import monotonic
 
-from uno_game.domain.state.game_state import GameState
+from domain.state.game_state import GameState
 
 
 class ReactionTimer:

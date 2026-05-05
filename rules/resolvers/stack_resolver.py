@@ -1,8 +1,8 @@
-from uno_game.application.commands.play_card import PlayCardCommand
-from uno_game.domain.entities.card import Card
-from uno_game.domain.state.game_state import GameState
-from uno_game.rules.resolvers.base_resolver import BaseResolver
-from uno_game.rules.validator.stack_validator import StackValidator
+from application.commands.play_card import PlayCardCommand
+from domain.entities.card import Card
+from domain.state.game_state import GameState
+from rules.resolvers.base_resolver import BaseResolver
+from rules.validator.stack_validator import StackValidator
 
 
 class StackResolver(BaseResolver):

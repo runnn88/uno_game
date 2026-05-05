@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Any
 
-from uno_game.config.enums import ActionType
+from config.enums import ActionType
 
 
 @dataclass(frozen=True)

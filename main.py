@@ -5,13 +5,14 @@ import sys
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from uno_game.config.constants import DEFAULT_DISCOVERY_PORT, DEFAULT_GAME_PORT
-from uno_game.infrastructure.network.client import GameClient
-from uno_game.infrastructure.network.discovery_client import DiscoveryClient
-from uno_game.infrastructure.network.discovery_server import DiscoveryServer
-from uno_game.infrastructure.network.host_server import HostServer
-from uno_game.infrastructure.network.protocol import MessageType
-from uno_game.presentation.pygame_app import PygameUnoApp
+from config.constants import DEFAULT_DISCOVERY_PORT, DEFAULT_GAME_PORT
+from infrastructure.network.client import GameClient
+from infrastructure.network.discovery_client import DiscoveryClient
+from infrastructure.network.discovery_server import DiscoveryServer
+from infrastructure.network.host_server import HostServer
+from infrastructure.network.protocol import MessageType
+from infrastructure.network.relay_server import RelayServer
+from presentation.pygame_app import PygameUnoApp
 
 
 def main() -> None:
@@ -23,6 +24,8 @@ def main() -> None:
     options = _parse_options(args[1:])
     if mode == "discovery":
         _run_discovery(options)
+    elif mode == "relay":
+        _run_relay(options)
     elif mode == "host":
         _run_host(options)
     elif mode == "client":
@@ -37,6 +40,12 @@ def _run_discovery(options: dict[str, str]) -> None:
         port=int(options.get("port", DEFAULT_DISCOVERY_PORT)),
         on_log=print,
     )
+    server.start()
+
+
+def _run_relay(options: dict[str, str]) -> None:
+    server = RelayServer(host=options.get("host", "0.0.0.0"), port=int(options.get("port", DEFAULT_DISCOVERY_PORT)))
+    print(f"Relay server listening on {server.host}:{server.port}")
     server.start()
 
 

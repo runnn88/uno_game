@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from uno_game.domain.entities.card import Card
+from domain.entities.card import Card
 
 
 class CardAssetManager:

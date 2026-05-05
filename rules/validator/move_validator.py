@@ -1,7 +1,7 @@
-from uno_game.application.commands.play_card import PlayCardCommand
-from uno_game.config.enums import CardRank
-from uno_game.domain.state.game_state import GameState
-from uno_game.rules.validator.card_playability import card_matches_state, is_action_final_card, penalty_value
+from application.commands.play_card import PlayCardCommand
+from config.enums import CardRank
+from domain.state.game_state import GameState
+from rules.validator.card_playability import card_matches_state, is_action_final_card, penalty_value
 
 
 class MoveValidator:

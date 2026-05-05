@@ -1,4 +1,4 @@
-from uno_game.presentation.ui.components.button import Button
+from presentation.ui.components.button import Button
 
 
 class ReactionButton(Button):

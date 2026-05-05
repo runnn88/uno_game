@@ -1,11 +1,11 @@
-from uno_game.application.commands.react_event import ReactEventCommand
-from uno_game.config.constants import REACTION_PENALTY_CARDS
-from uno_game.core.event_bus import EventBus
-from uno_game.domain.state.game_state import GameState
-from uno_game.systems.draw.draw_manager import DrawManager
-from uno_game.systems.reaction.reaction_manager import ReactionManager
-from uno_game.systems.win.endgame_handler import EndgameHandler
-from uno_game.systems.win.win_checker import WinChecker
+from application.commands.react_event import ReactEventCommand
+from config.constants import REACTION_PENALTY_CARDS
+from core.event_bus import EventBus
+from domain.state.game_state import GameState
+from systems.draw.draw_manager import DrawManager
+from systems.reaction.reaction_manager import ReactionManager
+from systems.win.endgame_handler import EndgameHandler
+from systems.win.win_checker import WinChecker
 
 
 class ReactionHandler:

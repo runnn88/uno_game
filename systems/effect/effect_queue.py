@@ -1,6 +1,6 @@
 from typing import Any
 
-from uno_game.domain.state.game_state import GameState
+from domain.state.game_state import GameState
 
 
 class EffectQueue:

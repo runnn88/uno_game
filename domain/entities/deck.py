@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from random import Random
 
-from uno_game.domain.entities.card import Card
+from domain.entities.card import Card
 
 
 @dataclass
