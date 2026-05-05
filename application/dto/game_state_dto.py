@@ -22,6 +22,7 @@ class GameStateDTO:
     active_color: str | None
     direction: str
     pending_draw: int
+    pending_draw_value: int
     reaction: dict[str, object]
     drew_this_turn: bool
     drawn_card_id: str | None
@@ -36,6 +37,7 @@ class GameStateDTO:
             "active_color": self.active_color,
             "direction": self.direction,
             "pending_draw": self.pending_draw,
+            "pending_draw_value": self.pending_draw_value,
             "reaction": self.reaction,
             "drew_this_turn": self.drew_this_turn,
             "drawn_card_id": self.drawn_card_id,
@@ -61,6 +63,7 @@ def game_state_to_dto(state: GameState, viewer_player_id: str | None = None) -> 
         active_color=state.active_color.value if state.active_color else None,
         direction=state.turn.direction.name,
         pending_draw=state.turn.pending_draw,
+        pending_draw_value=state.turn.pending_draw_value,
         reaction={
             "active": state.reaction.active,
             "source_player_id": state.reaction.source_player_id,

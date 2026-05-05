@@ -77,7 +77,7 @@ def _run_client(options: dict[str, str]) -> None:
 
     client = GameClient(on_message)
     client.connect(host, port, options.get("name", "Player"))
-    print("Commands: start | draw [count] | play <card_id> [color] [target_player_id] | react | quit")
+    print("Commands: start | draw [count] | pass | play <card_id> [color] [target_player_id] [pass_direction] | react | quit")
     while True:
         raw = input("> ").strip()
         if raw in {"quit", "exit"}:
@@ -90,10 +90,17 @@ def _run_client(options: dict[str, str]) -> None:
             client.start_game()
         elif parts[0] == "draw":
             client.draw_card(int(parts[1]) if len(parts) > 1 else 1)
+        elif parts[0] == "pass":
+            client.pass_turn()
         elif parts[0] == "react":
             client.react()
         elif parts[0] == "play" and len(parts) >= 2:
-            client.play_card(parts[1], parts[2] if len(parts) > 2 else None, parts[3] if len(parts) > 3 else None)
+            client.play_card(
+                parts[1],
+                parts[2] if len(parts) > 2 else None,
+                parts[3] if len(parts) > 3 else None,
+                parts[4] if len(parts) > 4 else None,
+            )
         else:
             print("Unknown command")
 

@@ -1,0 +1,42 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and local dependency folders
+.venv/
+venv/
+env/
+ENV/
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+
+# Local runtime/settings files
+config/user_settings.json
+*.log
+logs/
+
+# Temporary folders created by tests or local runs
+tmp*/
+temp*/
+.tmp/
+
+# IDE/editor and OS noise
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Pygame/SDL local artifacts
+*.bmp
+*.wav.tmp

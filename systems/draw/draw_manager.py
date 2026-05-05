@@ -12,8 +12,9 @@ class DrawManager:
         player = state.player_by_id(player_id)
         for _ in range(count):
             self.reshuffle.ensure_draw_pile(state)
+            if not state.deck.draw_pile:
+                break
             card = state.deck.draw()
             player.hand.add(card)
             drawn.append(card)
         return drawn
-

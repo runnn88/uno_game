@@ -101,13 +101,38 @@ class RuleTests(unittest.TestCase):
             PlayCardHandler().handle(state, PlayCardCommand("p2", "red_draw_2_0"))
 
     def test_drawn_playable_card_can_be_passed(self) -> None:
-        state = self.make_state()
+        state = GameState(players=[Player("p1", "A"), Player("p2", "B")], phase=GamePhase.PLAYING)
+        state.players[0].hand.add(Card("blue_2_0", CardColor.BLUE, CardRank.TWO))
+        state.players[1].hand.add(Card("green_1_0", CardColor.GREEN, CardRank.ONE))
+        state.deck.discard(Card("red_5_0", CardColor.RED, CardRank.FIVE))
+        state.active_color = CardColor.RED
         state.deck.draw_pile = [Card("red_9_0", CardColor.RED, CardRank.NINE)]
         DrawHandler().handle(state, DrawCardCommand("p1"))
         self.assertEqual(state.current_player.id, "p1")
         self.assertTrue(state.turn.drew_this_turn)
         PassTurnHandler().handle(state, PassTurnCommand("p1"))
         self.assertEqual(state.current_player.id, "p2")
+
+    def test_player_with_legal_card_cannot_draw(self) -> None:
+        state = self.make_state()
+        state.deck.draw_pile = [Card("red_9_0", CardColor.RED, CardRank.NINE)]
+        with self.assertRaises(ValueError):
+            DrawHandler().handle(state, DrawCardCommand("p1"))
+
+    def test_last_card_eight_resolves_reaction_before_win(self) -> None:
+        state = GameState(players=[Player("p1", "A"), Player("p2", "B")], phase=GamePhase.PLAYING)
+        state.players[0].hand.add(Card("red_8_0", CardColor.RED, CardRank.EIGHT))
+        state.players[1].hand.add(Card("green_1_0", CardColor.GREEN, CardRank.ONE))
+        state.deck.draw_pile = [Card("penalty_1", CardColor.BLUE, CardRank.ONE), Card("penalty_2", CardColor.BLUE, CardRank.TWO)]
+        state.deck.discard(Card("red_5_0", CardColor.RED, CardRank.FIVE))
+        state.active_color = CardColor.RED
+        PlayCardHandler().handle(state, PlayCardCommand("p1", "red_8_0"))
+        self.assertEqual(state.phase, GamePhase.REACTION)
+        self.assertIsNone(state.winner_id)
+        ReactionHandler().handle(state, ReactEventCommand("p1"))
+        ReactionHandler().handle(state, ReactEventCommand("p2"))
+        self.assertEqual(state.phase, GamePhase.ENDED)
+        self.assertEqual(state.winner_id, "p1")
 
     def test_bot_plays_legal_card(self) -> None:
         state = GameState(players=[Player("p1", "Bot", is_bot=True), Player("p2", "Human")], phase=GamePhase.PLAYING)

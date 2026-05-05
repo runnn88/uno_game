@@ -19,7 +19,7 @@ class PlayCardHandler:
         state.turn.drew_this_turn = False
         state.turn.drawn_card_id = None
         self.events.emit("CARD_PLAYED", {"player_id": command.player_id, "card_id": command.card_id})
-        if state.player_by_id(command.player_id).has_won:
+        if state.player_by_id(command.player_id).has_won and not state.reaction.active:
             self.endgame.end(state, command.player_id)
             self.events.emit("GAME_ENDED", {"winner_id": command.player_id})
             return

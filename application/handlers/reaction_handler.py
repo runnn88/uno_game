@@ -4,12 +4,16 @@ from uno_game.core.event_bus import EventBus
 from uno_game.domain.state.game_state import GameState
 from uno_game.systems.draw.draw_manager import DrawManager
 from uno_game.systems.reaction.reaction_manager import ReactionManager
+from uno_game.systems.win.endgame_handler import EndgameHandler
+from uno_game.systems.win.win_checker import WinChecker
 
 
 class ReactionHandler:
     def __init__(self, events: EventBus | None = None) -> None:
         self.reactions = ReactionManager()
         self.draws = DrawManager()
+        self.endgame = EndgameHandler()
+        self.wins = WinChecker()
         self.events = events or EventBus()
 
     def handle(self, state: GameState, command: ReactEventCommand) -> None:
@@ -25,5 +29,9 @@ class ReactionHandler:
                 "REACTION_FINISHED",
                 {"loser_player_ids": result.loser_player_ids, "penalty": REACTION_PENALTY_CARDS},
             )
+            winner_id = self.wins.winner_id(state)
+            if winner_id is not None:
+                self.endgame.end(state, winner_id)
+                self.events.emit("GAME_ENDED", {"winner_id": winner_id})
             return True
         return False

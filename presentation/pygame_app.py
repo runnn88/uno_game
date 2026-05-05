@@ -872,8 +872,29 @@ def is_card_playable(card: dict[str, str], state: dict[str, Any]) -> bool:
     if state.get("drew_this_turn") and state.get("drawn_card_id") and card["id"] != state.get("drawn_card_id"):
         return False
     pending_draw = int(state.get("pending_draw") or 0)
+    pending_draw_value = int(state.get("pending_draw_value") or 0)
     if pending_draw and card["rank"] not in {"draw_two", "wild_draw_four"}:
+        return False
+    if pending_draw and card_penalty_value(card["rank"]) < pending_draw_value:
+        return False
+    visible_owner = next(
+        (
+            player
+            for player in state.get("players", [])
+            if any(hand_card.get("id") == card["id"] for hand_card in player.get("hand", ()))
+        ),
+        None,
+    )
+    if visible_owner and int(visible_owner.get("card_count", 0)) == 1 and card["rank"] in {"skip", "reverse", "draw_two", "wild", "wild_draw_four"}:
         return False
     if card["color"] == "wild":
         return True
     return card["color"] == state.get("active_color") or card["rank"] == top.get("rank")
+
+
+def card_penalty_value(rank: str) -> int:
+    if rank == "draw_two":
+        return 2
+    if rank == "wild_draw_four":
+        return 4
+    return 0
