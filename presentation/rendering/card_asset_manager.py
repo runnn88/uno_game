@@ -53,7 +53,10 @@ class CardAssetManager:
         if key not in self._cache:
             import pygame
 
-            self._cache[key] = pygame.image.load(key).convert_alpha()
+            try:
+                self._cache[key] = pygame.image.load(key).convert_alpha()
+            except (OSError, pygame.error):
+                return None
         return self._cache[key]
 
     def _candidate_names(self, card: Card) -> tuple[str, ...]:

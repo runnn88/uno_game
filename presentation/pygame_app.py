@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import socket
-from dataclasses import dataclass
+import os
+import threading
 from pathlib import Path
 from typing import Any
 
 import pygame
 
+from config.constants import DEFAULT_RELAY_HOST, DEFAULT_RELAY_PORT
 from config.enums import CardColor, CardRank
 from config.settings import DEFAULT_SETTINGS
 from config.user_settings import UserSettings, load_user_settings, save_user_settings
@@ -25,7 +26,6 @@ from presentation.scenes.menu_scene import MenuScene
 from presentation.scenes.settings_scene import SettingsScene
 from presentation.theme import (
     ACCENT,
-    ACCENT_2,
     BAD,
     BORDER,
     CARD_H,
@@ -33,53 +33,16 @@ from presentation.theme import (
     GOOD,
     MUTED,
     PANEL,
-    SHADOW,
     TABLE_GREEN,
     TEXT,
     color_tuple,
 )
-
-
-@dataclass
-class Button:
-    rect: pygame.Rect
-    label: str
-    action: str
-    payload: Any = None
-    enabled: bool = True
-
-
-class InputBox:
-    def __init__(self, rect: pygame.Rect, label: str, value: str = "") -> None:
-        self.rect = rect
-        self.label = label
-        self.value = value
-        self.active = False
-
-    def handle_event(self, event: pygame.event.Event) -> bool:
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            self.active = self.rect.collidepoint(event.pos)
-            return self.active
-        if event.type == pygame.KEYDOWN and self.active:
-            if event.key == pygame.K_BACKSPACE:
-                self.value = self.value[:-1]
-            elif event.key in {pygame.K_RETURN, pygame.K_TAB}:
-                self.active = False
-            elif event.unicode and len(self.value) < 32:
-                self.value += event.unicode
-            return True
-        return False
-
-    def draw(self, surface: pygame.Surface, font: pygame.font.Font, small: pygame.font.Font) -> None:
-        border = ACCENT if self.active else (176, 197, 199)
-        shadow = pygame.Surface((self.rect.width + 8, self.rect.height + 8), pygame.SRCALPHA)
-        pygame.draw.rect(shadow, SHADOW, shadow.get_rect().move(4, 4), border_radius=8)
-        surface.blit(shadow, (self.rect.x - 4, self.rect.y - 4))
-        pygame.draw.rect(surface, (249, 253, 251), self.rect, border_radius=8)
-        pygame.draw.rect(surface, border, self.rect, 2, border_radius=8)
-        surface.blit(small.render(self.label.upper(), True, MUTED), (self.rect.x, self.rect.y - 23))
-        clipped = self.value[-24:]
-        surface.blit(font.render(clipped, True, TEXT), (self.rect.x + 12, self.rect.y + 10))
+from presentation.ui.components.button import Button
+from presentation.ui.components.chip import Chip
+from presentation.ui.components.input_box import InputBox
+from presentation.ui.components.panel import Panel
+from presentation.ui.components.player_panel import PlayerPanel
+from presentation.ui.components.room_code_panel import RoomCodePanel
 
 
 class PygameUnoApp:
@@ -108,6 +71,11 @@ class PygameUnoApp:
         self.feedback = GameFeedback(self)
         self.notice = ""
         self.notice_overlay: str | None = None
+        self.connecting = False
+        self._connection_id = 0
+        self._connection_result: tuple[int, bool, OnlineGameSession | None, str] | None = None
+        self._connection_lock = threading.Lock()
+        self._last_session_error: str | None = None
         self.assets_root = Path(__file__).resolve().parents[2] / "assets"
         self.scenes = {
             "menu": MenuScene(self),
@@ -149,29 +117,42 @@ class PygameUnoApp:
                     self.running = False
                 continue
 
-            self._current_scene().handle_event(event)
+            try:
+                self._current_scene().handle_event(event)
+            except Exception as exc:
+                self._handle_runtime_error("Input problem", exc)
 
     def _update(self, dt: float) -> None:
-        self.transition_alpha = max(0, self.transition_alpha - int(950 * dt))
-        self.click_feedback = [(pos, age + dt) for pos, age in self.click_feedback if age + dt < 0.24]
-        self.card_motions = [motion for motion in self.card_motions if motion.age + dt < motion.duration]
-        for motion in self.card_motions:
-            motion.age += dt
-        self.toasts = [toast for toast in self.toasts if toast.age + dt < toast.duration]
-        for toast in self.toasts:
-            toast.age += dt
-        self._current_scene().update(dt)
-        self.feedback.observe()
-        self._handle_session_error()
+        try:
+            self.transition_alpha = max(0, self.transition_alpha - int(950 * dt))
+            self.click_feedback = [(pos, age + dt) for pos, age in self.click_feedback if age + dt < 0.24]
+            self.card_motions = [motion for motion in self.card_motions if motion.age + dt < motion.duration]
+            for motion in self.card_motions:
+                motion.age += dt
+            self.toasts = [toast for toast in self.toasts if toast.age + dt < toast.duration]
+            for toast in self.toasts:
+                toast.age += dt
+            self._current_scene().update(dt)
+            self._finish_pending_connection()
+            self.feedback.observe()
+            self._handle_session_error()
+        except Exception as exc:
+            self._handle_runtime_error("Update problem", exc)
 
     def _draw(self) -> None:
         assert self.screen is not None
-        self.screen.fill(TABLE_GREEN)
-        self._current_scene().draw(self.screen)
-        draw_card_motions(self)
-        draw_toasts(self)
-        self._draw_transition()
-        self._draw_click_feedback()
+        try:
+            self.screen.fill(TABLE_GREEN)
+            self._current_scene().draw(self.screen)
+            draw_card_motions(self)
+            draw_toasts(self)
+            self._draw_transition()
+            self._draw_click_feedback()
+        except Exception as exc:
+            self._handle_runtime_error("Render problem", exc)
+            self.screen.fill(TABLE_GREEN)
+            self._draw_text("Something went wrong", 640, 314, BAD, center=True, size="big")
+            self._draw_text(self.notice or str(exc), 640, 374, TEXT, center=True)
         pygame.display.flip()
 
     def _current_scene(self):
@@ -215,8 +196,7 @@ class PygameUnoApp:
         self._draw_center_pile(top_card, state.get("active_color"), state.get("pending_draw", 0))
         self._draw_text(f"Turn: {current_name}", 640, 34, TEXT, center=True)
         self._draw_text(f"Direction: {state.get('direction')}  Phase: {phase}", 640, 62, MUTED, center=True)
-        if isinstance(self.session, OnlineGameSession) and self.session.room_code:
-            self._draw_chip(f"Room {self.session.room_code}", 1042, 30, ACCENT, width=180)
+        self._draw_room_code_panel()
 
         my_player = next((player for player in players if player.get("id") == me), None)
         hand = list(my_player.get("hand", [])) if my_player else []
@@ -253,48 +233,64 @@ class PygameUnoApp:
     def _draw_game_frame(self, state: dict[str, Any] | None) -> None:
         assert self.screen is not None
         pygame.draw.rect(self.screen, (222, 241, 232), pygame.Rect(0, 0, 1280, 92))
+        pygame.draw.rect(self.screen, (232, 246, 239), pygame.Rect(0, 0, 1280, 46))
         pygame.draw.line(self.screen, BORDER, (0, 92), (1280, 92), 2)
         self._draw_panel(pygame.Rect(22, 104, 245, 470), PANEL)
         self._draw_panel(pygame.Rect(1014, 104, 244, 470), PANEL)
         pygame.draw.rect(self.screen, (229, 244, 237), pygame.Rect(0, 584, 1280, 136))
         pygame.draw.line(self.screen, BORDER, (0, 584), (1280, 584), 2)
-        pygame.draw.ellipse(self.screen, (179, 220, 202), pygame.Rect(364, 130, 550, 310), 3)
+        table = pygame.Rect(354, 124, 572, 330)
+        table_fill = pygame.Surface(table.size, pygame.SRCALPHA)
+        pygame.draw.ellipse(table_fill, (236, 249, 241, 185), table_fill.get_rect())
+        pygame.draw.ellipse(table_fill, (126, 188, 165, 90), table_fill.get_rect().inflate(-18, -18), 3)
+        pygame.draw.ellipse(table_fill, (255, 255, 255, 110), pygame.Rect(84, 24, 400, 112))
+        self.screen.blit(table_fill, table.topleft)
         if self.session:
-            self._draw_text(self.session.info, 1020, 64, MUTED, size="small")
+            self._draw_chip(self.session.info, 1018, 62, MUTED, width=224)
 
     def _draw_players(self, players: list[dict[str, Any]], current: str | None, me: str | None) -> None:
+        assert self.screen is not None
         self._draw_text("Players", 42, 124, TEXT)
         y = 162
+        font, small, _big = self._fonts()
         for player in players:
-            active = player.get("id") == current
-            mine = player.get("id") == me
-            row = pygame.Rect(38, y - 8, 205, 32)
-            if active:
-                pygame.draw.rect(self.screen, (255, 237, 225), row, border_radius=8)
-                pygame.draw.rect(self.screen, ACCENT, row, 2, border_radius=8)
-            color = ACCENT if active else TEXT
-            tag = "YOU" if mine else ("BOT" if player.get("is_bot") else ("OFF" if not player.get("connected", True) else ""))
-            label = f"{player.get('name')}  {player.get('card_count')}"
-            self._draw_text(label, 48, y, color, size="small")
-            if tag:
-                self._draw_chip(tag, 172, y - 5, GOOD if tag == "YOU" else ACCENT_2 if tag == "BOT" else BAD, width=52)
+            PlayerPanel(
+                player,
+                pygame.Rect(38, y - 8, 205, 32),
+                active=player.get("id") == current,
+                mine=player.get("id") == me,
+            ).draw(self.screen, font, small)
             y += 38
 
     def _draw_center_pile(self, top_card: dict[str, str] | None, active_color: str | None, pending_draw: int) -> None:
         assert self.screen is not None
         assert self.card_renderer is not None
-        pile = pygame.Rect(565, 178, CARD_W + 38, CARD_H + 38)
-        self._draw_panel(pile, (252, 244, 232), radius=10)
+        deck_panel = pygame.Rect(428, 166, CARD_W + 44, CARD_H + 74)
+        discard_panel = pygame.Rect(565, 166, CARD_W + 44, CARD_H + 74)
+        self._draw_panel(deck_panel, (249, 246, 235), radius=10)
+        self._draw_panel(discard_panel, (252, 244, 232), radius=10)
+        self._draw_text("Draw", deck_panel.centerx, deck_panel.y + 16, MUTED, center=True, size="small")
+        self._draw_text("Discard", discard_panel.centerx, discard_panel.y + 16, MUTED, center=True, size="small")
         if top_card:
             card = card_from_dict(top_card)
-            self.card_renderer.draw_card(self.screen, card, pygame.Rect(584, 197, CARD_W, CARD_H))
-        self._draw_card_back(pygame.Rect(450, 197, CARD_W, CARD_H))
+            self.card_renderer.draw_card(self.screen, card, pygame.Rect(discard_panel.x + 22, discard_panel.y + 44, CARD_W, CARD_H))
+        self._draw_card_back(pygame.Rect(deck_panel.x + 22, deck_panel.y + 44, CARD_W, CARD_H))
         if active_color:
             color = color_tuple(active_color)
-            pygame.draw.circle(self.screen, color, (714, 230), 20)
-            pygame.draw.circle(self.screen, TEXT, (714, 230), 20, 2)
+            pygame.draw.circle(self.screen, color, (724, 232), 22)
+            pygame.draw.circle(self.screen, TEXT, (724, 232), 22, 2)
+            self._draw_text("Color", 724, 264, MUTED, center=True, size="small")
         if pending_draw:
-            self._draw_chip(f"+{pending_draw}", 690, 282, BAD, width=64)
+            self._draw_chip(f"+{pending_draw}", 692, 300, BAD, width=72)
+
+    def _draw_room_code_panel(self) -> None:
+        if not isinstance(self.session, OnlineGameSession) or not self.session.room_code:
+            return
+        assert self.screen is not None
+        font, small, big = self._fonts()
+        panel = RoomCodePanel(self.session.room_code, pygame.Rect(1032, 168, 198, 110))
+        panel.draw(self.screen, font, small, big)
+        self._add_button(panel.copy_rect.x, panel.copy_rect.y, panel.copy_rect.width, panel.copy_rect.height, "Copy Code", "copy_room_code")
 
     def _draw_hand(self, hand: list[dict[str, str]], state: dict[str, Any], can_play: bool) -> None:
         assert self.screen is not None
@@ -407,21 +403,8 @@ class PygameUnoApp:
     def _draw_buttons(self) -> None:
         assert self.screen is not None
         font, small, _big = self._fonts()
-        mouse = pygame.mouse.get_pos()
         for button in self.buttons:
-            draw_rect = button.rect
-            hovered = button.enabled and draw_rect.collidepoint(mouse)
-            base = (248, 239, 226) if button.enabled else (229, 230, 225)
-            color = (255, 232, 213) if hovered else base
-            shadow = pygame.Surface((draw_rect.width + 8, draw_rect.height + 8), pygame.SRCALPHA)
-            pygame.draw.rect(shadow, SHADOW if button.enabled else (0, 0, 0, 24), shadow.get_rect().move(4, 4), border_radius=8)
-            self.screen.blit(shadow, (draw_rect.x - 4, draw_rect.y - 4))
-            pygame.draw.rect(self.screen, color, draw_rect, border_radius=8)
-            border = ACCENT if button.enabled else (184, 190, 188)
-            pygame.draw.rect(self.screen, border, draw_rect, 2, border_radius=8)
-            selected_font = small if font.size(button.label)[0] > draw_rect.width - 22 else font
-            label = selected_font.render(button.label, True, TEXT if button.enabled else MUTED)
-            self.screen.blit(label, label.get_rect(center=draw_rect.center))
+            button.draw(self.screen, font, small)
 
     def _draw_panel(
         self,
@@ -431,23 +414,13 @@ class PygameUnoApp:
         radius: int = 8,
     ) -> None:
         assert self.screen is not None
-        shadow = pygame.Surface((rect.width + 14, rect.height + 14), pygame.SRCALPHA)
-        pygame.draw.rect(shadow, SHADOW, pygame.Rect(7, 8, rect.width, rect.height), border_radius=radius)
-        self.screen.blit(shadow, (rect.x - 7, rect.y - 7))
-        pygame.draw.rect(self.screen, color, rect, border_radius=radius)
-        pygame.draw.rect(self.screen, border, rect, 1, border_radius=radius)
+        Panel(rect, color, border, radius).draw(self.screen)
 
     def _draw_chip(self, label: str, x: int, y: int, color: tuple[int, int, int], width: int | None = None) -> None:
         assert self.screen is not None
         _font, small, _big = self._fonts()
         chip_width = width or max(74, small.size(label)[0] + 24)
-        rect = pygame.Rect(x, y, chip_width, 26)
-        fill = pygame.Surface(rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(fill, (*color, 42), fill.get_rect(), border_radius=8)
-        self.screen.blit(fill, rect.topleft)
-        pygame.draw.rect(self.screen, color, rect, 1, border_radius=8)
-        text = small.render(label, True, TEXT)
-        self.screen.blit(text, text.get_rect(center=rect.center))
+        Chip(label, pygame.Rect(x, y, chip_width, 26), color).draw(self.screen, small)
 
     def _draw_table_texture(self) -> None:
         assert self.screen is not None
@@ -564,15 +537,24 @@ class PygameUnoApp:
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
         for button in reversed(self.buttons):
-            if button.enabled and button.rect.collidepoint(pos):
+            if button.contains(pos):
                 self.click_feedback.append((pos, 0.0))
-                self._handle_action(button.action, button.payload)
+                self._safe_handle_action(button.action, button.payload)
                 return
         if self.mode == "game" and self.pending_card is None:
             for rect, card_data in reversed(self.hand_targets):
                 if rect.collidepoint(pos):
-                    self._select_card(card_data)
+                    self._safe_run("Could not select that card", lambda: self._select_card(card_data))
                     return
+
+    def _safe_handle_action(self, action: str, payload: Any) -> None:
+        self._safe_run("Action failed", lambda: self._handle_action(action, payload))
+
+    def _safe_run(self, title: str, fn) -> None:
+        try:
+            fn()
+        except Exception as exc:
+            self._handle_runtime_error(title, exc)
 
     def _handle_action(self, action: str, payload: Any) -> None:
         if action == "menu":
@@ -599,6 +581,8 @@ class PygameUnoApp:
         elif action == "dismiss_notice":
             self.notice_overlay = None
             self.notice = ""
+        elif action == "copy_room_code":
+            self._copy_room_code()
         elif action == "host_settings":
             self.host_settings_open = True
         elif action == "host_settings_close":
@@ -668,31 +652,101 @@ class PygameUnoApp:
         self._set_mode("game")
         self.notice = ""
 
-    def _start_online_host(self, relay_host: str, name: str) -> None:
-        self._close_session()
-        try:
-            self.session = OnlineGameSession(relay_host, 5051, name, is_host=True)
-            self.session.info = "Hosting through relay"
-            self._set_mode("game")
-            self.notice = ""
-        except Exception as exc:
-            self.notice = str(exc)
-            self._close_session()
-
     def _connect_from_form(self) -> None:
-        try:
-            name = self.input_boxes[0].value or "Player"
-            relay_host = self.input_boxes[1].value or "127.0.0.1"
-            if self.mode == "host_room":
-                self._start_online_host(relay_host, name)
-                return
-            room_code = self.input_boxes[2].value.strip().upper()
+        if self.connecting:
+            self.notice = "Still connecting. Please wait a moment."
+            return
+        name = self.input_boxes[0].value.strip() or "Player"
+        room_code = None if self.mode == "host_room" else self.input_boxes[1].value.strip().upper()
+        if self.mode == "join_room" and not room_code:
+            self.notice = "Enter a room code before connecting."
+            self.feedback.push_toast("Room code missing", "Ask the host for the room code, then try again.", BAD, duration=3.2)
+            return
+        self._begin_online_connection(name, room_code)
+
+    def _relay_endpoint(self) -> tuple[str, int]:
+        host = os.environ.get("UNO_RELAY_HOST", DEFAULT_RELAY_HOST)
+        port = int(os.environ.get("UNO_RELAY_PORT", str(DEFAULT_RELAY_PORT)))
+        return host, port
+
+    def _begin_online_connection(self, name: str, room_code: str | None) -> None:
+        relay_host, relay_port = self._relay_endpoint()
+        is_host = self.mode == "host_room"
+        self._connection_id += 1
+        token = self._connection_id
+        self.connecting = True
+        self.notice = "Connecting to relay..."
+        self.feedback.push_toast("Connecting...", "Trying the relay now. The screen will stay responsive.", ACCENT, duration=2.2)
+
+        def worker() -> None:
+            try:
+                session = OnlineGameSession(relay_host, relay_port, name, is_host=is_host, room_code=room_code)
+                session.info = "Hosting through relay" if is_host else "Connected through relay"
+                result = (token, True, session, "")
+            except Exception as exc:
+                result = (token, False, None, self._connection_error_message(exc))
+            with self._connection_lock:
+                self._connection_result = result
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_pending_connection(self) -> None:
+        with self._connection_lock:
+            result = self._connection_result
+            self._connection_result = None
+        if result is None:
+            return
+        token, ok, session, message = result
+        if token != self._connection_id:
+            if session is not None:
+                session.close()
+            return
+        self.connecting = False
+        if ok and session is not None:
             self._close_session()
-            self.session = OnlineGameSession(relay_host, 5051, name, is_host=False, room_code=room_code)
-            self._set_mode("game")
+            self.session = session
             self.notice = ""
+            self._set_mode("game")
+            self.feedback.push_toast("Connected!", "Room code flow is ready. No IP address needed.", GOOD, duration=3.0)
+            return
+        self.feedback.push_toast("Connection failed", message, BAD, duration=5.0)
+        self._return_home_with_notice(message)
+
+    def _connection_error_message(self, exc: Exception) -> str:
+        raw = str(exc).strip()
+        if isinstance(exc, TimeoutError) or "timed out" in raw.lower():
+            return "The relay did not answer. Check that the relay server is running, then try again."
+        if "refused" in raw.lower() or "actively refused" in raw.lower():
+            return "No relay server is running at the configured endpoint."
+        if "room code is required" in raw.lower():
+            return "Room code is required to join a relay room."
+        return raw or "Could not connect to the relay server."
+
+    def _copy_room_code(self) -> None:
+        if not isinstance(self.session, OnlineGameSession) or not self.session.room_code:
+            return
+        try:
+            self._copy_text_to_clipboard(self.session.room_code)
+            self.feedback.push_toast("Room code copied!", f"{self.session.room_code} is ready to paste.", GOOD, duration=2.6)
         except Exception as exc:
-            self.notice = str(exc)
+            self.feedback.push_toast("Copy failed", str(exc), BAD, duration=3.0)
+
+    def _copy_text_to_clipboard(self, text: str) -> None:
+        try:
+            if not pygame.scrap.get_init():
+                pygame.scrap.init()
+            pygame.scrap.put(pygame.SCRAP_TEXT, text.encode("utf-8"))
+            return
+        except Exception:
+            pass
+        import tkinter
+
+        root = tkinter.Tk()
+        root.withdraw()
+        root.clipboard_clear()
+        root.clipboard_append(text)
+        root.update()
+        root.destroy()
 
     def _go_menu(self) -> None:
         self._close_session()
@@ -701,6 +755,9 @@ class PygameUnoApp:
         self.pending_color = None
         self.pending_pass_direction = None
         self.host_settings_open = False
+        self.connecting = False
+        self._connection_id += 1
+        self._last_session_error = None
         self.notice_overlay = None
         self._set_mode("menu")
 
@@ -716,16 +773,26 @@ class PygameUnoApp:
         if scene is not None:
             scene.enter()
 
+    def _return_home_with_notice(self, message: str) -> None:
+        self._go_menu()
+        self.notice = message
+
     def _handle_session_error(self) -> None:
         if self.mode != "game" or not isinstance(self.session, OnlineGameSession):
             return
         error = self.session.error
         if not error:
+            self._last_session_error = None
             return
+        if error != self._last_session_error:
+            self._last_session_error = error
+            self.feedback.push_toast("Network notice", error, BAD, duration=4.8)
         if error.strip().lower() == "room is full":
             self._go_menu()
             self.notice = "room is full"
             self.notice_overlay = "room is full"
+        elif "lost connection" in error.lower():
+            self.notice = error
 
     def _draw_notice_overlay(self) -> None:
         if not self.notice_overlay or self.screen is None:
@@ -746,13 +813,13 @@ class PygameUnoApp:
         if not isinstance(self.session, OnlineGameSession) or not self.session.is_host:
             return
         state = self.session.snapshot() or {}
-        self.session.client.host_settings(max_players=int(state.get("max_players", 4)) + delta)
+        self.session.host_settings(max_players=int(state.get("max_players", 4)) + delta)
 
     def _toggle_host_lock(self) -> None:
         if not isinstance(self.session, OnlineGameSession) or not self.session.is_host:
             return
         state = self.session.snapshot() or {}
-        self.session.client.host_settings(lobby_locked=not bool(state.get("lobby_locked", False)))
+        self.session.host_settings(lobby_locked=not bool(state.get("lobby_locked", False)))
 
     def _toggle_setting(self, name: str) -> None:
         if not hasattr(self.user_settings, name):
@@ -769,20 +836,29 @@ class PygameUnoApp:
         self._save_settings(show_notice=False)
 
     def _save_settings(self, show_notice: bool = True) -> None:
-        save_user_settings(self.user_settings)
-        self._apply_user_settings()
-        if show_notice:
-            self.notice = "Settings saved"
+        try:
+            save_user_settings(self.user_settings)
+            self._apply_user_settings()
+            if show_notice:
+                self.notice = "Settings saved"
+                self.feedback.push_toast("Settings saved", "Your preferences are updated.", GOOD, duration=2.8)
+        except Exception as exc:
+            self.notice = f"Could not save settings: {exc}"
+            self.feedback.push_toast("Settings not saved", str(exc), BAD, duration=4.0)
 
     def _apply_user_settings(self) -> None:
-        self.sounds.configure(self.user_settings.sound_enabled, self.user_settings.volume)
-        if self.card_renderer is not None:
-            self.card_renderer.show_missing_labels = self.user_settings.show_missing_card_labels
-        if self.screen is not None:
-            flags = pygame.FULLSCREEN if self.user_settings.fullscreen else 0
-            is_fullscreen = bool(self.screen.get_flags() & pygame.FULLSCREEN)
-            if is_fullscreen != self.user_settings.fullscreen:
-                self.screen = pygame.display.set_mode((self.settings.width, self.settings.height), flags)
+        try:
+            self.sounds.configure(self.user_settings.sound_enabled, self.user_settings.volume)
+            if self.card_renderer is not None:
+                self.card_renderer.show_missing_labels = self.user_settings.show_missing_card_labels
+            if self.screen is not None:
+                flags = pygame.FULLSCREEN if self.user_settings.fullscreen else 0
+                is_fullscreen = bool(self.screen.get_flags() & pygame.FULLSCREEN)
+                if is_fullscreen != self.user_settings.fullscreen:
+                    self.screen = pygame.display.set_mode((self.settings.width, self.settings.height), flags)
+        except pygame.error as exc:
+            self.notice = f"Could not apply display settings: {exc}"
+            self.feedback.push_toast("Display setting failed", str(exc), BAD, duration=4.0)
 
     def _player_name(self, players: list[dict[str, Any]], player_id: str | None) -> str:
         for player in players:
@@ -790,15 +866,15 @@ class PygameUnoApp:
                 return str(player.get("name"))
         return "None"
 
+    def _handle_runtime_error(self, title: str, exc: Exception) -> None:
+        message = str(exc) or exc.__class__.__name__
+        self.notice = message
+        self.feedback.push_toast(title, message, BAD, duration=5.0)
+        if self.mode not in {"menu", "settings", "instructions"}:
+            self._return_home_with_notice(message)
+
 def card_from_dict(data: dict[str, str]) -> Card:
     return Card(data["id"], CardColor(data["color"]), CardRank(data["rank"]))
-
-
-def local_ip_hint() -> str:
-    try:
-        return socket.gethostbyname(socket.gethostname())
-    except OSError:
-        return "127.0.0.1"
 
 
 def is_card_playable(card: dict[str, str], state: dict[str, Any]) -> bool:

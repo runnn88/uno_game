@@ -13,6 +13,7 @@ python main.py
 The pygame app includes local hotseat, bot games, relay-hosted room codes, and room-code join.
 Use the Instructions page from the main menu to learn the game flow and card meanings.
 Use the Settings page to toggle sound, adjust volume, enable/disable placeholder background art, show/hide missing-card labels, and switch fullscreen.
+Online players only use names and room codes in the game UI. Relay host/port details are deployment configuration, not player input.
 
 Install dependency if needed:
 
@@ -41,6 +42,7 @@ python main.py stop-relay --host 127.0.0.1 --port 5051
 ```
 
 Run the relay on a neutral/server machine. Hosts and players connect to the relay and use only a room code; players do not connect directly to the host machine, so the host IP is not shared peer-to-peer.
+For the pygame app, set `UNO_RELAY_HOST` and `UNO_RELAY_PORT` outside the game when you deploy a relay somewhere else. Leave them unset for a local relay on the default port.
 
 ## Architecture
 

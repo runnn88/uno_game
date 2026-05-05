@@ -128,16 +128,22 @@ class OnlineGameSession:
         self.room_code = room_code
         self.client = GameClient(self._on_message)
         self._lock = threading.RLock()
+        self._ready = threading.Event()
         self._state: dict[str, Any] | None = None
         self.error: str | None = None
         self.info = "Connected through relay"
-        self.client.connect_to_server(host, port)
-        if is_host:
-            self.client.create_room(name)
-        else:
-            if room_code is None:
-                raise ValueError("Room code is required")
-            self.client.join_room(room_code, name)
+        self.client.connect_to_server(host, port, timeout=2.5)
+        try:
+            if is_host:
+                self.client.create_room(name)
+            else:
+                if room_code is None:
+                    raise ValueError("Room code is required")
+                self.client.join_room(room_code, name)
+            self._wait_until_ready(is_host)
+        except Exception:
+            self.client.disconnect()
+            raise
 
     @property
     def player_id(self) -> str | None:
@@ -152,7 +158,7 @@ class OnlineGameSession:
             return dict(self._state) if self._state else None
 
     def start_game(self) -> None:
-        self.client.start_game()
+        self._run_network("start the game", self.client.start_game)
 
     def play_card(
         self,
@@ -161,16 +167,19 @@ class OnlineGameSession:
         target_player_id: str | None = None,
         pass_direction: str | None = None,
     ) -> None:
-        self.client.play_card(card_id, chosen_color, target_player_id, pass_direction)
+        self._run_network("play that card", lambda: self.client.play_card(card_id, chosen_color, target_player_id, pass_direction))
 
     def draw_card(self) -> None:
-        self.client.draw_card()
+        self._run_network("draw a card", self.client.draw_card)
 
     def pass_turn(self) -> None:
-        self.client.pass_turn()
+        self._run_network("pass the turn", self.client.pass_turn)
 
     def react(self, player_id: str | None = None) -> None:
-        self.client.react()
+        self._run_network("send your reaction", self.client.react)
+
+    def host_settings(self, max_players: int | None = None, lobby_locked: bool | None = None) -> None:
+        self._run_network("update host settings", lambda: self.client.host_settings(max_players=max_players, lobby_locked=lobby_locked))
 
     def update(self) -> None:
         pass
@@ -184,8 +193,28 @@ class OnlineGameSession:
                 self._state = dict(message.payload)
             elif message.type == MessageType.ERROR:
                 self.error = str(message.payload.get("message", "Network error"))
+                self._ready.set()
             elif message.type == MessageType.PLAYER_JOINED:
                 self.error = None
+                if not self.is_host:
+                    self._ready.set()
             elif message.type == MessageType.ROOM_CREATED:
                 self.room_code = str(message.payload.get("room_code", ""))
                 self.error = None
+                self._ready.set()
+
+    def _run_network(self, action: str, fn) -> None:
+        try:
+            fn()
+        except Exception as exc:
+            self.error = f"Could not {action}: {exc}"
+
+    def _wait_until_ready(self, is_host: bool) -> None:
+        if not self._ready.wait(3.0):
+            raise TimeoutError("The relay accepted the socket but did not confirm the room.")
+        if self.error:
+            raise ValueError(self.error)
+        if is_host and not self.room_code:
+            raise ValueError("Relay did not return a room code.")
+        if not self.client.player_id:
+            raise ValueError("Relay did not assign a player slot.")

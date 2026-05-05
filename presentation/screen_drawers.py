@@ -1,6 +1,7 @@
 import pygame
 
 from presentation.theme import ACCENT, ACCENT_2, BAD, GOOD, MUTED, PANEL, PANEL_2, TEXT
+from presentation.ui.components.settings_row import SettingsRow
 
 
 def draw_menu(app) -> None:
@@ -94,11 +95,10 @@ def draw_settings(app) -> None:
         ("Fullscreen", "fullscreen", "On" if app.user_settings.fullscreen else "Off"),
     ]
     y = 248
+    font, small, _big = app._fonts()
     for label, key, value in rows:
         row_rect = pygame.Rect(386, y - 4, 508, 46)
-        pygame.draw.rect(app.screen, (250, 253, 249), row_rect, border_radius=8)
-        app._draw_text(label, 410, y + 8, TEXT)
-        app._draw_chip(value, 632, y + 1, GOOD if value == "On" else MUTED, width=78)
+        SettingsRow(row_rect, label, value).draw(app.screen, font, small)
         if key == "volume":
             app._add_button(740, y, 42, 38, "-", "volume_down")
             app._add_button(794, y, 42, 38, "+", "volume_up")
@@ -119,21 +119,21 @@ def draw_join(app, input_box_cls) -> None:
     if not app.input_boxes:
         if app.mode == "host_room":
             app.input_boxes = [
-                input_box_cls(pygame.Rect(420, 276, 440, 46), "Name", "Player 1"),
-                input_box_cls(pygame.Rect(420, 358, 440, 46), "Relay Host", "127.0.0.1"),
+                input_box_cls(pygame.Rect(420, 322, 440, 46), "Name", "Player 1"),
             ]
         else:
             app.input_boxes = [
-                input_box_cls(pygame.Rect(420, 244, 440, 46), "Name", "Player"),
-                input_box_cls(pygame.Rect(420, 326, 440, 46), "Relay Host", "127.0.0.1"),
-                input_box_cls(pygame.Rect(420, 408, 440, 46), "Room Code", ""),
+                input_box_cls(pygame.Rect(420, 276, 440, 46), "Name", "Player"),
+                input_box_cls(pygame.Rect(420, 374, 440, 46), "Room Code", ""),
             ]
     app._draw_title("Host Game" if app.mode == "host_room" else "Join Game")
     app._draw_panel(pygame.Rect(360, 210, 560, 330), PANEL)
+    app._draw_text("Online rooms use only relay room codes. IP addresses stay out of the game UI.", 640, 248, MUTED, center=True, size="small")
     font, small, _big = app._fonts()
     for box in app.input_boxes:
         box.draw(app.screen, font, small)
-    app._add_button(420, 486, 210, 46, "Create" if app.mode == "host_room" else "Connect", "connect")
+    connect_label = "Connecting..." if app.connecting else ("Create" if app.mode == "host_room" else "Connect")
+    app._add_button(420, 486, 210, 46, connect_label, "connect", enabled=not app.connecting)
     app._add_button(650, 486, 210, 46, "Back", "menu")
     app._draw_buttons()
     if app.notice:

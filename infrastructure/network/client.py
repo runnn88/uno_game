@@ -13,10 +13,13 @@ class GameClient:
         self.player_id: str | None = None
         self.state: dict[str, object] | None = None
         self._running = False
+        self._intentional_disconnect = False
 
-    def connect_to_server(self, host: str, port: int) -> None:
-        self.socket = socket.create_connection((host, port))
+    def connect_to_server(self, host: str, port: int, timeout: float = 2.5) -> None:
+        self.socket = socket.create_connection((host, port), timeout=timeout)
+        self.socket.settimeout(None)
         self._running = True
+        self._intentional_disconnect = False
         threading.Thread(target=self.receive_loop, daemon=True).start()
 
     def create_room(self, name: str) -> None:
@@ -26,6 +29,7 @@ class GameClient:
         self.send(NetworkMessage.of(MessageType.JOIN_ROOM, {"room_code": room_code, "name": name}))
 
     def disconnect(self) -> None:
+        self._intentional_disconnect = True
         self._running = False
         if self.socket is not None:
             try:
@@ -37,7 +41,11 @@ class GameClient:
     def send(self, message: NetworkMessage) -> None:
         if self.socket is None:
             raise RuntimeError("Client is not connected")
-        send_message(self.socket, message)
+        try:
+            send_message(self.socket, message)
+        except OSError as exc:
+            self._running = False
+            raise RuntimeError("Lost connection to the relay server") from exc
 
     def start_game(self) -> None:
         self.send(NetworkMessage.of(MessageType.START_GAME))
@@ -77,14 +85,20 @@ class GameClient:
         if self.socket is None:
             return
         file_obj = self.socket.makefile("rb")
+        lost_message = "Lost connection to the relay server"
         while self._running:
             try:
                 message = receive_message(file_obj)
-            except OSError:
+            except OSError as exc:
+                lost_message = str(exc) or lost_message
                 break
             if message is None:
                 break
             self.handle(message)
+        was_running = self._running
+        self._running = False
+        if was_running and not self._intentional_disconnect:
+            self.handle(NetworkMessage.of(MessageType.ERROR, {"message": lost_message}))
 
     def handle(self, message: NetworkMessage) -> None:
         if message.type == MessageType.PLAYER_JOINED:
