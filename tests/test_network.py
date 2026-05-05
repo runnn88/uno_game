@@ -1,7 +1,9 @@
 import threading
 import time
 import unittest
+import socket
 
+import main
 from infrastructure.network.client import GameClient
 from infrastructure.network.relay_server import RelayServer
 
@@ -89,6 +91,18 @@ class NetworkTests(unittest.TestCase):
             host.disconnect()
             guest.disconnect()
             relay.stop()
+
+    def test_stop_relay_command_stops_listener(self) -> None:
+        relay = RelayServer(host="127.0.0.1", port=0)
+        thread = threading.Thread(target=relay.start, daemon=True)
+        thread.start()
+        while relay.port == 0:
+            time.sleep(0.01)
+
+        main._stop_relay({"host": "127.0.0.1", "port": str(relay.port)})
+        time.sleep(0.2)
+        with self.assertRaises(OSError):
+            socket.create_connection(("127.0.0.1", relay.port), timeout=0.2)
 
     def test_relay_numbers_default_names_by_join_order(self) -> None:
         relay = RelayServer(host="127.0.0.1", port=0)

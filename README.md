@@ -34,6 +34,12 @@ Private relay room-code play:
 python main.py relay --host 0.0.0.0 --port 5051
 ```
 
+Stop a relay running on your machine:
+
+```bash
+python main.py stop-relay --host 127.0.0.1 --port 5051
+```
+
 Run the relay on a neutral/server machine. Hosts and players connect to the relay and use only a room code; players do not connect directly to the host machine, so the host IP is not shared peer-to-peer.
 
 ## Architecture

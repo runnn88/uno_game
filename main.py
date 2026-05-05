@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import socket
 
 
 if __package__ in {None, ""}:
@@ -7,8 +8,9 @@ if __package__ in {None, ""}:
 
 from config.constants import DEFAULT_DISCOVERY_PORT
 from infrastructure.network.client import GameClient
-from infrastructure.network.protocol import MessageType
+from infrastructure.network.protocol import MessageType, NetworkMessage
 from infrastructure.network.relay_server import RelayServer
+from infrastructure.network.serializer import receive_message, send_message
 from presentation.pygame_app import PygameUnoApp
 
 
@@ -21,6 +23,8 @@ def main() -> None:
     options = _parse_options(args[1:])
     if mode == "relay":
         _run_relay(options)
+    elif mode == "stop-relay":
+        _stop_relay(options)
     elif mode == "client":
         _run_client(options)
     else:
@@ -31,6 +35,18 @@ def _run_relay(options: dict[str, str]) -> None:
     server = RelayServer(host=options.get("host", "0.0.0.0"), port=int(options.get("port", DEFAULT_DISCOVERY_PORT)))
     print(f"Relay server listening on {server.host}:{server.port}")
     server.start()
+
+
+def _stop_relay(options: dict[str, str]) -> None:
+    host = options.get("host", "127.0.0.1")
+    port = int(options.get("port", DEFAULT_DISCOVERY_PORT))
+    with socket.create_connection((host, port), timeout=3) as sock:
+        send_message(sock, NetworkMessage.of(MessageType.SHUTDOWN_RELAY))
+        response = receive_message(sock.makefile("rb"))
+    if response is None:
+        print("Relay stop requested")
+        return
+    print(response.payload.get("message", "Relay stop requested"))
 
 
 def _run_client(options: dict[str, str]) -> None:

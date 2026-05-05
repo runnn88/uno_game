@@ -1,55 +1,43 @@
 from __future__ import annotations
 
 import socket
-import threading
 from dataclasses import dataclass
 from pathlib import Path
-from time import monotonic
 from typing import Any
 
 import pygame
 
-from application.commands.draw_card import DrawCardCommand
-from application.commands.play_card import PlayCardCommand
-from application.commands.react_event import ReactEventCommand
-from application.dto.game_state_dto import game_state_to_dto
-from application.handlers.draw_handler import DrawHandler
-from application.handlers.play_card_handler import PlayCardHandler
-from application.handlers.reaction_handler import ReactionHandler
-from config.enums import CardColor, CardRank, PassDirection
+from config.enums import CardColor, CardRank
 from config.settings import DEFAULT_SETTINGS
 from config.user_settings import UserSettings, load_user_settings, save_user_settings
 from domain.entities.card import Card
-from domain.entities.player import Player
-from domain.state.game_state import GameState
-from infrastructure.network.client import GameClient
-from infrastructure.network.protocol import MessageType, NetworkMessage
 from presentation.audio.sound_manager import SoundManager
+from presentation.game_feedback import CardMotion, GameFeedback, Toast
+from presentation.game_sessions import LocalGameSession, OnlineGameSession
+from presentation.rendering.gameplay_effects import draw_card_motions, draw_toasts
 from presentation.rendering.card_renderer import CardRenderer
+from presentation.screen_drawers import draw_instructions, draw_join, draw_menu, draw_settings
 from presentation.scenes.end_scene import EndScene
 from presentation.scenes.game_scene import GameScene
 from presentation.scenes.instructions_scene import InstructionsScene
 from presentation.scenes.lobby_scene import LobbyScene
 from presentation.scenes.menu_scene import MenuScene
 from presentation.scenes.settings_scene import SettingsScene
-from systems.setup.game_initializer import GameInitializer
-from systems.ai.bot_player import BotPlayerController
-
-
-CARD_W = 94
-CARD_H = 132
-TABLE_GREEN = (204, 232, 216)
-TABLE_DARK = (78, 142, 122)
-PANEL = (255, 250, 241)
-PANEL_2 = (233, 245, 246)
-TEXT = (37, 47, 56)
-MUTED = (99, 115, 121)
-ACCENT = (232, 141, 105)
-ACCENT_2 = (82, 151, 171)
-BAD = (209, 91, 99)
-GOOD = (92, 169, 124)
-BORDER = (183, 204, 198)
-SHADOW = (52, 78, 72, 48)
+from presentation.theme import (
+    ACCENT,
+    ACCENT_2,
+    BAD,
+    BORDER,
+    CARD_H,
+    CARD_W,
+    GOOD,
+    MUTED,
+    PANEL,
+    SHADOW,
+    TABLE_GREEN,
+    TEXT,
+    color_tuple,
+)
 
 
 @dataclass
@@ -94,179 +82,6 @@ class InputBox:
         surface.blit(font.render(clipped, True, TEXT), (self.rect.x + 12, self.rect.y + 10))
 
 
-class LocalGameSession:
-    def __init__(self, player_count: int = 2, bot_count: int = 0) -> None:
-        human_count = max(1, player_count - bot_count)
-        players = [Player(f"p{i + 1}", f"Player {i + 1}") for i in range(human_count)]
-        for index in range(bot_count):
-            bot_id = len(players) + 1
-            players.append(Player(f"p{bot_id}", f"Bot {index + 1}", is_bot=True))
-        self.state = GameState(players=players)
-        self.initializer = GameInitializer()
-        self.play_handler = PlayCardHandler()
-        self.draw_handler = DrawHandler()
-        self.reaction_handler = ReactionHandler()
-        self.bot_controller = BotPlayerController()
-        self._bot_action_at = 0.0
-        self.error: str | None = None
-        self.info = "Local hotseat"
-        self.start_game()
-
-    @property
-    def player_id(self) -> str | None:
-        return self.state.current_player.id if self.state.current_player else None
-
-    @property
-    def can_start_game(self) -> bool:
-        return True
-
-    def snapshot(self) -> dict[str, Any] | None:
-        return game_state_to_dto(self.state, self.player_id).to_dict()
-
-    def start_game(self) -> None:
-        self._run(lambda: self.initializer.start(self.state))
-
-    def play_card(
-        self,
-        card_id: str,
-        chosen_color: str | None = None,
-        target_player_id: str | None = None,
-        pass_direction: str | None = None,
-    ) -> None:
-        player_id = self.player_id
-        if player_id is None:
-            return
-        color = CardColor(chosen_color) if chosen_color else None
-        direction = PassDirection(pass_direction) if pass_direction else None
-        self._run(lambda: self.play_handler.handle(self.state, PlayCardCommand(player_id, card_id, color, target_player_id, direction)))
-
-    def draw_card(self) -> None:
-        player_id = self.player_id
-        if player_id is None:
-            return
-        self._run(lambda: self.draw_handler.handle(self.state, DrawCardCommand(player_id)))
-
-    def pass_turn(self) -> None:
-        player_id = self.player_id
-        if player_id is None:
-            return
-        from application.commands.pass_turn import PassTurnCommand
-        from application.handlers.pass_turn_handler import PassTurnHandler
-
-        self._run(lambda: PassTurnHandler().handle(self.state, PassTurnCommand(player_id)))
-
-    def react(self, player_id: str | None = None) -> None:
-        target = player_id or self.player_id
-        if target is None:
-            return
-        self._run(lambda: self.reaction_handler.handle(self.state, ReactEventCommand(target)))
-
-    def update(self) -> None:
-        if self.state.reaction.active:
-            for player in self.state.players:
-                if player.is_bot and player.id not in self.state.reaction.responders:
-                    self.react(player.id)
-        if self.state.reaction.active and self.reaction_handler.finish_if_ready(self.state):
-            self.error = None
-            self._bot_action_at = monotonic() + 0.5
-        current = self.state.current_player
-        if current is not None and current.is_bot and not self.state.reaction.active and self.state.winner_id is None:
-            now = monotonic()
-            if self._bot_action_at == 0.0:
-                self._bot_action_at = now + 0.6
-            elif now >= self._bot_action_at:
-                self._run(lambda: self.bot_controller.take_turn(self.state, current))
-                self._bot_action_at = monotonic() + 0.6
-        elif current is not None and not current.is_bot:
-            self._bot_action_at = 0.0
-
-    def close(self) -> None:
-        pass
-
-    def _run(self, fn) -> None:
-        try:
-            fn()
-            self.error = None
-        except Exception as exc:
-            self.error = str(exc)
-
-
-class OnlineGameSession:
-    def __init__(
-        self,
-        host: str,
-        port: int,
-        name: str,
-        is_host: bool = False,
-        room_code: str | None = None,
-    ) -> None:
-        self.is_host = is_host
-        self.room_code = room_code
-        self.client = GameClient(self._on_message)
-        self._lock = threading.RLock()
-        self._state: dict[str, Any] | None = None
-        self.error: str | None = None
-        self.info = "Connected through relay"
-        self.client.connect_to_server(host, port)
-        if is_host:
-            self.client.create_room(name)
-        else:
-            if room_code is None:
-                raise ValueError("Room code is required")
-            self.client.join_room(room_code, name)
-
-    @property
-    def player_id(self) -> str | None:
-        return self.client.player_id
-
-    @property
-    def can_start_game(self) -> bool:
-        return self.is_host
-
-    def snapshot(self) -> dict[str, Any] | None:
-        with self._lock:
-            return dict(self._state) if self._state else None
-
-    def start_game(self) -> None:
-        self.client.start_game()
-
-    def play_card(
-        self,
-        card_id: str,
-        chosen_color: str | None = None,
-        target_player_id: str | None = None,
-        pass_direction: str | None = None,
-    ) -> None:
-        self.client.play_card(card_id, chosen_color, target_player_id, pass_direction)
-
-    def draw_card(self) -> None:
-        self.client.draw_card()
-
-    def pass_turn(self) -> None:
-        self.client.pass_turn()
-
-    def react(self, player_id: str | None = None) -> None:
-        self.client.react()
-
-    def update(self) -> None:
-        pass
-
-    def close(self) -> None:
-        self.client.disconnect()
-
-    def _on_message(self, message: NetworkMessage) -> None:
-        with self._lock:
-            if message.type == MessageType.GAME_STATE:
-                self._state = dict(message.payload)
-            elif message.type == MessageType.ERROR:
-                self.error = str(message.payload.get("message", "Network error"))
-            elif message.type == MessageType.PLAYER_JOINED:
-                self.error = None
-            elif message.type == MessageType.ROOM_CREATED:
-                self.room_code = str(message.payload.get("room_code", ""))
-                self.error = None
-
-
 class PygameUnoApp:
     def __init__(self) -> None:
         self.settings = DEFAULT_SETTINGS
@@ -287,6 +102,10 @@ class PygameUnoApp:
         self.host_settings_open = False
         self.transition_alpha = 255
         self.click_feedback: list[tuple[tuple[int, int], float]] = []
+        self.card_motions: list[CardMotion] = []
+        self.toasts: list[Toast] = []
+        self._last_game_state: dict[str, Any] | None = None
+        self.feedback = GameFeedback(self)
         self.notice = ""
         self.notice_overlay: str | None = None
         self.assets_root = Path(__file__).resolve().parents[2] / "assets"
@@ -335,13 +154,22 @@ class PygameUnoApp:
     def _update(self, dt: float) -> None:
         self.transition_alpha = max(0, self.transition_alpha - int(950 * dt))
         self.click_feedback = [(pos, age + dt) for pos, age in self.click_feedback if age + dt < 0.24]
+        self.card_motions = [motion for motion in self.card_motions if motion.age + dt < motion.duration]
+        for motion in self.card_motions:
+            motion.age += dt
+        self.toasts = [toast for toast in self.toasts if toast.age + dt < toast.duration]
+        for toast in self.toasts:
+            toast.age += dt
         self._current_scene().update(dt)
+        self.feedback.observe()
         self._handle_session_error()
 
     def _draw(self) -> None:
         assert self.screen is not None
         self.screen.fill(TABLE_GREEN)
         self._current_scene().draw(self.screen)
+        draw_card_motions(self)
+        draw_toasts(self)
         self._draw_transition()
         self._draw_click_feedback()
         pygame.display.flip()
@@ -354,141 +182,16 @@ class PygameUnoApp:
         return self.scenes.get(self.mode, self.scenes["menu"])
 
     def _draw_menu(self) -> None:
-        assert self.screen is not None
-        self.buttons.clear()
-        self.input_boxes.clear()
-        self._draw_title("UNO Online")
-
-        hero = pygame.Rect(76, 124, 430, 500)
-        menu = pygame.Rect(548, 124, 656, 500)
-        self._draw_panel(hero, (251, 248, 236))
-        self._draw_panel(menu, PANEL)
-
-        self._draw_text("Fast local play", 116, 170, TEXT, size="big")
-        self._draw_text("or relay-hosted rooms", 118, 218, MUTED)
-        self._draw_chip("Hotseat", 118, 274, ACCENT_2)
-        self._draw_chip("Bots", 230, 274, GOOD)
-        self._draw_chip("Room Code", 315, 274, ACCENT)
-        self._draw_menu_cards()
-        self._draw_text("Match color or rank, stack draw cards, and use special 0/7/8 rules.", 118, 560, MUTED, size="small")
-
-        self._draw_text("Choose Mode", 602, 168, TEXT, size="big")
-        self._draw_text("Local games start immediately. Relay games need the relay server running.", 604, 214, MUTED)
-        x = 604
-        y = 258
-        self._add_button(x, y, 126, 48, "2P Local", "local", 2)
-        self._add_button(x + 138, y, 126, 48, "3P Local", "local", 3)
-        self._add_button(x + 276, y, 126, 48, "4P Local", "local", 4)
-        self._add_button(x, y + 64, 195, 48, "1P + Bot", "local", (2, 1))
-        self._add_button(x + 207, y + 64, 195, 48, "1P + 3 Bots", "local", (4, 3))
-        self._add_button(x, y + 146, 402, 50, "Host Relay Room", "host_room")
-        self._add_button(x, y + 208, 402, 50, "Join Relay Code", "join_room")
-        self._add_button(x, y + 286, 195, 48, "Instructions", "instructions")
-        self._add_button(x + 207, y + 286, 195, 48, "Settings", "settings")
-        self._draw_text("Online play uses a relay room code. Players never connect directly to the host.", 640, 676, MUTED, center=True, size="small")
-        if self.notice:
-            self._draw_text(self.notice, 640, 696, BAD, center=True)
-        if not self.notice_overlay:
-            self._draw_buttons()
-        self._draw_notice_overlay()
+        draw_menu(self)
 
     def _draw_instructions(self) -> None:
-        assert self.screen is not None
-        self.buttons.clear()
-        self.input_boxes.clear()
-        self._draw_title("Instructions")
-        self._add_button(28, 22, 92, 34, "Back", "menu")
-
-        left_panel = pygame.Rect(76, 216, 546, 408)
-        right_panel = pygame.Rect(658, 216, 546, 408)
-        self._draw_panel(left_panel, PANEL)
-        self._draw_panel(right_panel, PANEL_2)
-
-        self._draw_chip("Flow", 116, 248, ACCENT_2)
-        self._draw_text("How To Play", 116, 288, TEXT, size="big")
-        rules = [
-            "Match the discard pile by color or rank. Wild cards can be played on any color.",
-            "Click a playable card in your hand. Dimmed cards are not legal for the current turn.",
-            "If you cannot play, click Draw. After drawing, play the drawn card if it is legal or click Pass.",
-            "When a draw penalty is active, you must stack a +2 or +4 with equal or higher value, otherwise draw the penalty.",
-            "First player with no cards wins. Action cards cannot be played as your final card.",
-        ]
-        self._draw_wrapped_lines(rules, 116, 340, 460, 26, TEXT, size="small")
-
-        self._draw_chip("Cards", 698, 248, ACCENT)
-        self._draw_text("Card Meanings", 698, 288, TEXT, size="big")
-        cards = [
-            "0: choose clockwise or counter-clockwise, then all players pass hands in that direction.",
-            "7: choose another player and swap hands with them.",
-            "8: starts a reaction round. Players hit React; the last or missing responder is punished.",
-            "Skip: the next player loses their turn.",
-            "Reverse: changes the turn direction.",
-            "+2: adds two cards to the pending draw penalty.",
-            "Wild: choose the active color.",
-            "Wild +4: choose the active color and adds four cards to the pending draw penalty.",
-        ]
-        self._draw_wrapped_lines(cards, 698, 340, 464, 24, TEXT, size="small")
-        self._draw_buttons()
+        draw_instructions(self)
 
     def _draw_settings(self) -> None:
-        assert self.screen is not None
-        self.buttons.clear()
-        self.input_boxes.clear()
-        self._draw_title("Settings")
-        panel = pygame.Rect(350, 210, 580, 360)
-        self._draw_panel(panel, PANEL)
-        rows = [
-            ("Sound", "sound_enabled", "On" if self.user_settings.sound_enabled else "Off"),
-            ("Volume", "volume", f"{int(self.user_settings.volume * 100)}%"),
-            ("Background Art", "show_background_art", "On" if self.user_settings.show_background_art else "Off"),
-            ("Missing Card Labels", "show_missing_card_labels", "On" if self.user_settings.show_missing_card_labels else "Off"),
-            ("Fullscreen", "fullscreen", "On" if self.user_settings.fullscreen else "Off"),
-        ]
-        y = 248
-        for label, key, value in rows:
-            row_rect = pygame.Rect(386, y - 4, 508, 46)
-            pygame.draw.rect(self.screen, (250, 253, 249), row_rect, border_radius=8)
-            self._draw_text(label, 410, y + 8, TEXT)
-            self._draw_chip(value, 632, y + 1, GOOD if value == "On" else MUTED, width=78)
-            if key == "volume":
-                self._add_button(740, y, 42, 38, "-", "volume_down")
-                self._add_button(794, y, 42, 38, "+", "volume_up")
-            else:
-                self._add_button(740, y, 112, 38, "Toggle", f"toggle_{key}")
-            y += 55
-        self._add_button(410, 592, 205, 44, "Save", "save_settings")
-        self._add_button(666, 592, 205, 44, "Back", "menu")
-        self._draw_text("Settings are saved to config/user_settings.json.", 640, 640, MUTED, center=True)
-        if self.notice:
-            self._draw_text(self.notice, 640, 670, GOOD, center=True)
-        self._draw_buttons()
+        draw_settings(self)
 
     def _draw_join(self) -> None:
-        assert self.screen is not None
-        self.buttons.clear()
-        if not self.input_boxes:
-            if self.mode == "host_room":
-                self.input_boxes = [
-                    InputBox(pygame.Rect(420, 276, 440, 46), "Name", "Player 1"),
-                    InputBox(pygame.Rect(420, 358, 440, 46), "Relay Host", "127.0.0.1"),
-                ]
-            else:
-                self.input_boxes = [
-                    InputBox(pygame.Rect(420, 244, 440, 46), "Name", "Player"),
-                    InputBox(pygame.Rect(420, 326, 440, 46), "Relay Host", "127.0.0.1"),
-                    InputBox(pygame.Rect(420, 408, 440, 46), "Room Code", ""),
-                ]
-        self._draw_title("Host Game" if self.mode == "host_room" else "Join Game")
-        form_panel = pygame.Rect(360, 210, 560, 330)
-        self._draw_panel(form_panel, PANEL)
-        font, small, _big = self._fonts()
-        for box in self.input_boxes:
-            box.draw(self.screen, font, small)
-        self._add_button(420, 486, 210, 46, "Create" if self.mode == "host_room" else "Connect", "connect")
-        self._add_button(650, 486, 210, 46, "Back", "menu")
-        self._draw_buttons()
-        if self.notice:
-            self._draw_text(self.notice, 640, 560, BAD, center=True)
+        draw_join(self, InputBox)
 
     def _draw_game(self) -> None:
         assert self.screen is not None
@@ -1089,16 +792,6 @@ class PygameUnoApp:
 
 def card_from_dict(data: dict[str, str]) -> Card:
     return Card(data["id"], CardColor(data["color"]), CardRank(data["rank"]))
-
-
-def color_tuple(color: str) -> tuple[int, int, int]:
-    return {
-        "red": (239, 154, 154),
-        "yellow": (245, 218, 137),
-        "green": (159, 215, 178),
-        "blue": (161, 196, 235),
-        "wild": (154, 145, 166),
-    }.get(color, (235, 232, 224))
 
 
 def local_ip_hint() -> str:
