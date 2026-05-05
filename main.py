@@ -5,11 +5,8 @@ import sys
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config.constants import DEFAULT_DISCOVERY_PORT, DEFAULT_GAME_PORT
+from config.constants import DEFAULT_DISCOVERY_PORT
 from infrastructure.network.client import GameClient
-from infrastructure.network.discovery_client import DiscoveryClient
-from infrastructure.network.discovery_server import DiscoveryServer
-from infrastructure.network.host_server import HostServer
 from infrastructure.network.protocol import MessageType
 from infrastructure.network.relay_server import RelayServer
 from presentation.pygame_app import PygameUnoApp
@@ -22,43 +19,17 @@ def main() -> None:
         return
     mode = args[0]
     options = _parse_options(args[1:])
-    if mode == "discovery":
-        _run_discovery(options)
-    elif mode == "relay":
+    if mode == "relay":
         _run_relay(options)
-    elif mode == "host":
-        _run_host(options)
     elif mode == "client":
         _run_client(options)
     else:
         raise SystemExit(f"Unknown mode: {mode}")
 
 
-def _run_discovery(options: dict[str, str]) -> None:
-    server = DiscoveryServer(
-        host=options.get("host", "0.0.0.0"),
-        port=int(options.get("port", DEFAULT_DISCOVERY_PORT)),
-        on_log=print,
-    )
-    server.start()
-
-
 def _run_relay(options: dict[str, str]) -> None:
     server = RelayServer(host=options.get("host", "0.0.0.0"), port=int(options.get("port", DEFAULT_DISCOVERY_PORT)))
     print(f"Relay server listening on {server.host}:{server.port}")
-    server.start()
-
-
-def _run_host(options: dict[str, str]) -> None:
-    port = int(options.get("port", DEFAULT_GAME_PORT))
-    server = HostServer(host=options.get("host", "0.0.0.0"), port=port, on_log=print)
-    discovery_host = options.get("discovery-host")
-    if discovery_host:
-        code = DiscoveryClient(discovery_host, int(options.get("discovery-port", DEFAULT_DISCOVERY_PORT))).create_room(
-            game_port=port,
-            public_host=options.get("public-host"),
-        )
-        print(f"Room code: {code}")
     server.start()
 
 
@@ -75,17 +46,16 @@ def _run_client(options: dict[str, str]) -> None:
         else:
             print(f"{message.type.value}: {message.payload}")
 
-    if "room-code" in options:
-        host, port = DiscoveryClient(
-            options.get("discovery-host", "127.0.0.1"),
-            int(options.get("discovery-port", DEFAULT_DISCOVERY_PORT)),
-        ).join_room(options["room-code"])
-    else:
-        host = options.get("host", "127.0.0.1")
-        port = int(options.get("port", DEFAULT_GAME_PORT))
-
+    relay_host = options.get("relay-host", options.get("host", "127.0.0.1"))
+    relay_port = int(options.get("relay-port", options.get("port", DEFAULT_DISCOVERY_PORT)))
     client = GameClient(on_message)
-    client.connect(host, port, options.get("name", "Player"))
+    client.connect_to_server(relay_host, relay_port)
+    if "create" in options:
+        client.create_room(options.get("name", "Host"))
+    elif "room-code" in options:
+        client.join_room(options["room-code"], options.get("name", "Player"))
+    else:
+        raise SystemExit("Use --create yes to host or --room-code CODE to join through the relay")
     print("Commands: start | draw [count] | pass | play <card_id> [color] [target_player_id] [pass_direction] | react | quit")
     while True:
         raw = input("> ").strip()

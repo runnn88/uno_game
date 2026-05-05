@@ -25,12 +25,6 @@ Run verification:
 python run_tests.py
 ```
 
-Or, from the parent `Assignment4/` folder:
-
-```bash
-python -m main
-```
-
 ## CLI Network Tools
 
 Private relay room-code play:
@@ -49,7 +43,7 @@ Run the relay on a neutral/server machine. Hosts and players connect to the rela
 - `rules/`: host-side move validation and card effect resolvers
 - `systems/`: gameplay systems such as turn order, draw, reaction, setup, and win handling
 - `application/`: command objects, handlers, and DTOs for local or networked play
-- `infrastructure/`: local controller, TCP host/client, discovery, serialization, replay logging
+- `infrastructure/`: local controller, relay client/server, serialization, replay logging
 - `presentation/`: pygame-only scenes, UI components, input, and rendering
 - `assets/`: images, fonts, and sounds
 - `utils/`: small shared helpers
@@ -89,7 +83,7 @@ See `assets/README.md` for every supported and optional asset filename.
 The pygame app delegates lifecycle work to scene classes:
 
 - `presentation/scenes/menu_scene.py`: main mode selection
-- `presentation/scenes/lobby_scene.py`: direct and room-code join forms
+- `presentation/scenes/lobby_scene.py`: relay room creation and room-code join forms
 - `presentation/scenes/settings_scene.py`: sound, volume, display, and visual helper settings
 - `presentation/scenes/game_scene.py`: active table, hand, draw/play/react controls
 - `presentation/scenes/end_scene.py`: endgame overlay flow

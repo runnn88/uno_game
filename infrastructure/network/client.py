@@ -14,10 +14,6 @@ class GameClient:
         self.state: dict[str, object] | None = None
         self._running = False
 
-    def connect(self, host: str, port: int, name: str) -> None:
-        self.connect_to_server(host, port)
-        self.send(NetworkMessage.of(MessageType.JOIN_ROOM, {"name": name}))
-
     def connect_to_server(self, host: str, port: int) -> None:
         self.socket = socket.create_connection((host, port))
         self._running = True

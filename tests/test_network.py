@@ -3,24 +3,27 @@ import time
 import unittest
 
 from infrastructure.network.client import GameClient
-from infrastructure.network.host_server import HostServer
 from infrastructure.network.relay_server import RelayServer
 
 
 class NetworkTests(unittest.TestCase):
     def test_only_host_can_start_game(self) -> None:
-        server = HostServer(host="127.0.0.1", port=0)
+        server = RelayServer(host="127.0.0.1", port=0)
         thread = threading.Thread(target=server.start, daemon=True)
         thread.start()
         while server.port == 0:
             time.sleep(0.01)
 
         errors: list[str] = []
-        host = GameClient()
+        room_codes: list[str] = []
+        host = GameClient(lambda message: room_codes.append(str(message.payload["room_code"])) if message.type.value == "ROOM_CREATED" else None)
         guest = GameClient(lambda message: errors.append(str(message.payload.get("message", ""))) if message.type.value == "ERROR" else None)
         try:
-            host.connect("127.0.0.1", server.port, "Host")
-            guest.connect("127.0.0.1", server.port, "Guest")
+            host.connect_to_server("127.0.0.1", server.port)
+            host.create_room("Host")
+            time.sleep(0.2)
+            guest.connect_to_server("127.0.0.1", server.port)
+            guest.join_room(room_codes[-1], "Guest")
             time.sleep(0.2)
             guest.start_game()
             time.sleep(0.2)
@@ -31,20 +34,25 @@ class NetworkTests(unittest.TestCase):
             server.stop()
 
     def test_host_lobby_lock_rejects_new_players(self) -> None:
-        server = HostServer(host="127.0.0.1", port=0)
+        server = RelayServer(host="127.0.0.1", port=0)
         thread = threading.Thread(target=server.start, daemon=True)
         thread.start()
         while server.port == 0:
             time.sleep(0.01)
 
         errors: list[str] = []
+        room_codes: list[str] = []
         host = GameClient()
+        host.on_message = lambda message: room_codes.append(str(message.payload["room_code"])) if message.type.value == "ROOM_CREATED" else None
         guest = GameClient(lambda message: errors.append(str(message.payload.get("message", ""))) if message.type.value == "ERROR" else None)
         try:
-            host.connect("127.0.0.1", server.port, "Host")
-            time.sleep(0.1)
-            server.configure_lobby(lobby_locked=True)
-            guest.connect("127.0.0.1", server.port, "Guest")
+            host.connect_to_server("127.0.0.1", server.port)
+            host.create_room("Host")
+            time.sleep(0.2)
+            host.host_settings(lobby_locked=True)
+            time.sleep(0.2)
+            guest.connect_to_server("127.0.0.1", server.port)
+            guest.join_room(room_codes[-1], "Guest")
             time.sleep(0.2)
             self.assertTrue(any("locked" in error for error in errors))
         finally:
