@@ -1,8 +1,8 @@
 from random import Random
 
-from uno_game.config.enums import CardColor, CardRank
-from uno_game.domain.entities.card import Card
-from uno_game.domain.entities.deck import Deck
+from config.enums import CardColor, CardRank
+from domain.entities.card import Card
+from domain.entities.deck import Deck
 
 
 COLOR_RANKS = [

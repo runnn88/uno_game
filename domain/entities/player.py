@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from uno_game.domain.entities.hand import Hand
+from domain.entities.hand import Hand
 
 
 @dataclass

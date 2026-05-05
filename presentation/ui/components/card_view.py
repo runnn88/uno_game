@@ -1,5 +1,5 @@
-from uno_game.domain.entities.card import Card
-from uno_game.presentation.rendering.card_asset_manager import CardAssetManager
+from domain.entities.card import Card
+from presentation.rendering.card_asset_manager import CardAssetManager
 
 
 class CardView:

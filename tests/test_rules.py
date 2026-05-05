@@ -1,20 +1,20 @@
 import unittest
 
-from uno_game.application.commands.draw_card import DrawCardCommand
-from uno_game.application.commands.pass_turn import PassTurnCommand
-from uno_game.application.commands.play_card import PlayCardCommand
-from uno_game.application.commands.react_event import ReactEventCommand
-from uno_game.application.handlers.draw_handler import DrawHandler
-from uno_game.application.handlers.pass_turn_handler import PassTurnHandler
-from uno_game.application.handlers.play_card_handler import PlayCardHandler
-from uno_game.application.handlers.reaction_handler import ReactionHandler
-from uno_game.config.constants import REACTION_PENALTY_CARDS
-from uno_game.config.enums import CardColor, CardRank, GamePhase, PassDirection
-from uno_game.domain.entities.card import Card
-from uno_game.domain.entities.player import Player
-from uno_game.domain.state.game_state import GameState
-from uno_game.systems.ai.bot_player import BotPlayerController
-from uno_game.systems.turn.turn_manager import TurnManager
+from application.commands.draw_card import DrawCardCommand
+from application.commands.pass_turn import PassTurnCommand
+from application.commands.play_card import PlayCardCommand
+from application.commands.react_event import ReactEventCommand
+from application.handlers.draw_handler import DrawHandler
+from application.handlers.pass_turn_handler import PassTurnHandler
+from application.handlers.play_card_handler import PlayCardHandler
+from application.handlers.reaction_handler import ReactionHandler
+from config.constants import REACTION_PENALTY_CARDS
+from config.enums import CardColor, CardRank, GamePhase, PassDirection
+from domain.entities.card import Card
+from domain.entities.player import Player
+from domain.state.game_state import GameState
+from systems.ai.bot_player import BotPlayerController
+from systems.turn.turn_manager import TurnManager
 
 
 class RuleTests(unittest.TestCase):

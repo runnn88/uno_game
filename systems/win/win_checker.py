@@ -1,5 +1,5 @@
-from uno_game.domain.state.game_state import GameState
-from uno_game.rules.validator.win_validator import WinValidator
+from domain.state.game_state import GameState
+from rules.validator.win_validator import WinValidator
 
 
 class WinChecker:

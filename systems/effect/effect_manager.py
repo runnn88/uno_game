@@ -1,5 +1,5 @@
-from uno_game.domain.state.game_state import GameState
-from uno_game.systems.effect.effect_queue import EffectQueue
+from domain.state.game_state import GameState
+from systems.effect.effect_queue import EffectQueue
 
 
 class EffectManager:

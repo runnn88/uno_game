@@ -1,4 +1,4 @@
-from uno_game.domain.entities.player import Player
+from domain.entities.player import Player
 
 
 class WinValidator:

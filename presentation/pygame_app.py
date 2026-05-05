@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import socket
 import threading
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from time import monotonic
@@ -10,33 +9,30 @@ from typing import Any
 
 import pygame
 
-from uno_game.application.commands.draw_card import DrawCardCommand
-from uno_game.application.commands.play_card import PlayCardCommand
-from uno_game.application.commands.react_event import ReactEventCommand
-from uno_game.application.dto.game_state_dto import game_state_to_dto
-from uno_game.application.handlers.draw_handler import DrawHandler
-from uno_game.application.handlers.play_card_handler import PlayCardHandler
-from uno_game.application.handlers.reaction_handler import ReactionHandler
-from uno_game.config.enums import CardColor, CardRank, PassDirection
-from uno_game.config.settings import DEFAULT_SETTINGS
-from uno_game.config.user_settings import UserSettings, load_user_settings, save_user_settings
-from uno_game.domain.entities.card import Card
-from uno_game.domain.entities.player import Player
-from uno_game.domain.state.game_state import GameState
-from uno_game.infrastructure.network.client import GameClient
-from uno_game.infrastructure.network.discovery_client import DiscoveryClient
-from uno_game.infrastructure.network.discovery_server import DiscoveryServer
-from uno_game.infrastructure.network.host_server import HostServer
-from uno_game.infrastructure.network.protocol import MessageType, NetworkMessage
-from uno_game.presentation.audio.sound_manager import SoundManager
-from uno_game.presentation.rendering.card_renderer import CardRenderer
-from uno_game.presentation.scenes.end_scene import EndScene
-from uno_game.presentation.scenes.game_scene import GameScene
-from uno_game.presentation.scenes.lobby_scene import LobbyScene
-from uno_game.presentation.scenes.menu_scene import MenuScene
-from uno_game.presentation.scenes.settings_scene import SettingsScene
-from uno_game.systems.setup.game_initializer import GameInitializer
-from uno_game.systems.ai.bot_player import BotPlayerController
+from application.commands.draw_card import DrawCardCommand
+from application.commands.play_card import PlayCardCommand
+from application.commands.react_event import ReactEventCommand
+from application.dto.game_state_dto import game_state_to_dto
+from application.handlers.draw_handler import DrawHandler
+from application.handlers.play_card_handler import PlayCardHandler
+from application.handlers.reaction_handler import ReactionHandler
+from config.enums import CardColor, CardRank, PassDirection
+from config.settings import DEFAULT_SETTINGS
+from config.user_settings import UserSettings, load_user_settings, save_user_settings
+from domain.entities.card import Card
+from domain.entities.player import Player
+from domain.state.game_state import GameState
+from infrastructure.network.client import GameClient
+from infrastructure.network.protocol import MessageType, NetworkMessage
+from presentation.audio.sound_manager import SoundManager
+from presentation.rendering.card_renderer import CardRenderer
+from presentation.scenes.end_scene import EndScene
+from presentation.scenes.game_scene import GameScene
+from presentation.scenes.lobby_scene import LobbyScene
+from presentation.scenes.menu_scene import MenuScene
+from presentation.scenes.settings_scene import SettingsScene
+from systems.setup.game_initializer import GameInitializer
+from systems.ai.bot_player import BotPlayerController
 
 
 CARD_W = 94
@@ -146,8 +142,8 @@ class LocalGameSession:
         player_id = self.player_id
         if player_id is None:
             return
-        from uno_game.application.commands.pass_turn import PassTurnCommand
-        from uno_game.application.handlers.pass_turn_handler import PassTurnHandler
+        from application.commands.pass_turn import PassTurnCommand
+        from application.handlers.pass_turn_handler import PassTurnHandler
 
         self._run(lambda: PassTurnHandler().handle(self.state, PassTurnCommand(player_id)))
 
@@ -193,19 +189,23 @@ class OnlineGameSession:
         host: str,
         port: int,
         name: str,
-        host_server: HostServer | None = None,
-        discovery_server: DiscoveryServer | None = None,
+        is_host: bool = False,
         room_code: str | None = None,
     ) -> None:
-        self.host_server = host_server
-        self.discovery_server = discovery_server
+        self.is_host = is_host
         self.room_code = room_code
         self.client = GameClient(self._on_message)
         self._lock = threading.RLock()
         self._state: dict[str, Any] | None = None
         self.error: str | None = None
-        self.info = f"Connected to {host}:{port}"
-        self.client.connect(host, port, name)
+        self.info = "Connected through relay"
+        self.client.connect_to_server(host, port)
+        if is_host:
+            self.client.create_room(name)
+        else:
+            if room_code is None:
+                raise ValueError("Room code is required")
+            self.client.join_room(room_code, name)
 
     @property
     def player_id(self) -> str | None:
@@ -213,7 +213,7 @@ class OnlineGameSession:
 
     @property
     def can_start_game(self) -> bool:
-        return self.host_server is not None
+        return self.is_host
 
     def snapshot(self) -> dict[str, Any] | None:
         with self._lock:
@@ -245,10 +245,6 @@ class OnlineGameSession:
 
     def close(self) -> None:
         self.client.disconnect()
-        if self.host_server is not None:
-            self.host_server.stop()
-        if self.discovery_server is not None:
-            self.discovery_server.stop()
 
     def _on_message(self, message: NetworkMessage) -> None:
         with self._lock:
@@ -257,6 +253,9 @@ class OnlineGameSession:
             elif message.type == MessageType.ERROR:
                 self.error = str(message.payload.get("message", "Network error"))
             elif message.type == MessageType.PLAYER_JOINED:
+                self.error = None
+            elif message.type == MessageType.ROOM_CREATED:
+                self.room_code = str(message.payload.get("room_code", ""))
                 self.error = None
 
 
@@ -277,11 +276,14 @@ class PygameUnoApp:
         self.pending_card: dict[str, str] | None = None
         self.pending_color: str | None = None
         self.pending_pass_direction: str | None = None
+        self.host_settings_open = False
+        self.transition_alpha = 255
+        self.click_feedback: list[tuple[tuple[int, int], float]] = []
         self.notice = ""
         self.assets_root = Path(__file__).resolve().parents[2] / "assets"
         self.scenes = {
             "menu": MenuScene(self),
-            "join_direct": LobbyScene(self, "join_direct"),
+            "host_room": LobbyScene(self, "host_room"),
             "join_room": LobbyScene(self, "join_room"),
             "game": GameScene(self),
             "end": EndScene(self),
@@ -312,7 +314,7 @@ class PygameUnoApp:
                 self.running = False
                 continue
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                if self.mode in {"game", "join_direct", "join_room", "settings"}:
+                if self.mode in {"game", "host_room", "join_room", "settings"}:
                     self._go_menu()
                 else:
                     self.running = False
@@ -321,12 +323,16 @@ class PygameUnoApp:
             self._current_scene().handle_event(event)
 
     def _update(self, dt: float) -> None:
+        self.transition_alpha = max(0, self.transition_alpha - int(950 * dt))
+        self.click_feedback = [(pos, age + dt) for pos, age in self.click_feedback if age + dt < 0.24]
         self._current_scene().update(dt)
 
     def _draw(self) -> None:
         assert self.screen is not None
         self.screen.fill(TABLE_GREEN)
         self._current_scene().draw(self.screen)
+        self._draw_transition()
+        self._draw_click_feedback()
         pygame.display.flip()
 
     def _current_scene(self):
@@ -348,13 +354,11 @@ class PygameUnoApp:
         self._add_button(x + 228, y, 102, 48, "4P Local", "local", 4)
         self._add_button(x, y + 62, 159, 48, "1P + Bot", "local", (2, 1))
         self._add_button(x + 171, y + 62, 159, 48, "1P + 3 Bots", "local", (4, 3))
-        self._add_button(x, y + 124, 330, 48, "Host Online", "host_direct")
-        self._add_button(x, y + 186, 330, 48, "Host Room Code", "host_room")
-        self._add_button(x, y + 248, 330, 48, "Join Direct", "join_direct")
-        self._add_button(x, y + 310, 330, 48, "Join Room Code", "join_room")
-        self._add_button(x, y + 372, 330, 48, "Settings", "settings")
+        self._add_button(x, y + 124, 330, 48, "Host Relay Room", "host_room")
+        self._add_button(x, y + 186, 330, 48, "Join Relay Code", "join_room")
+        self._add_button(x, y + 248, 330, 48, "Settings", "settings")
         self._draw_buttons()
-        self._draw_text("Card images load from assets/images/cards. Missing assets are listed in assets/README.md.", 640, 670, MUTED, center=True)
+        self._draw_text("Online play uses a relay room code. Players never connect directly to the host.", 640, 670, MUTED, center=True)
         if self.notice:
             self._draw_text(self.notice, 640, 696, BAD, center=True)
 
@@ -393,23 +397,22 @@ class PygameUnoApp:
         assert self.screen is not None
         self.buttons.clear()
         if not self.input_boxes:
-            if self.mode == "join_direct":
+            if self.mode == "host_room":
                 self.input_boxes = [
-                    InputBox(pygame.Rect(420, 240, 440, 42), "Name", "Player"),
-                    InputBox(pygame.Rect(420, 315, 440, 42), "Host", "127.0.0.1"),
-                    InputBox(pygame.Rect(420, 390, 440, 42), "Port", "5050"),
+                    InputBox(pygame.Rect(420, 260, 440, 42), "Name", "Host"),
+                    InputBox(pygame.Rect(420, 340, 440, 42), "Relay Host", "127.0.0.1"),
                 ]
             else:
                 self.input_boxes = [
                     InputBox(pygame.Rect(420, 240, 440, 42), "Name", "Player"),
-                    InputBox(pygame.Rect(420, 315, 440, 42), "Discovery Host", "127.0.0.1"),
+                    InputBox(pygame.Rect(420, 315, 440, 42), "Relay Host", "127.0.0.1"),
                     InputBox(pygame.Rect(420, 390, 440, 42), "Room Code", ""),
                 ]
-        self._draw_title("Join Game")
+        self._draw_title("Host Game" if self.mode == "host_room" else "Join Game")
         font, small, _big = self._fonts()
         for box in self.input_boxes:
             box.draw(self.screen, font, small)
-        self._add_button(420, 470, 210, 46, "Connect", "connect")
+        self._add_button(420, 470, 210, 46, "Create" if self.mode == "host_room" else "Connect", "connect")
         self._add_button(650, 470, 210, 46, "Back", "menu")
         self._draw_buttons()
         if self.notice:
@@ -462,6 +465,10 @@ class PygameUnoApp:
             self._add_button(530, 410, 220, 46, "Back To Menu", "menu")
 
         self._draw_prompt(state)
+        if self.session and self.session.can_start_game and phase in {"menu", "lobby", "playing"}:
+            self._add_button(1068, 22, 154, 34, "Host Settings", "host_settings")
+        if self.host_settings_open:
+            self._draw_host_settings(state)
         self._add_button(28, 22, 92, 34, "Menu", "menu")
         self._draw_buttons()
         error = self.session.error if self.session else None
@@ -614,13 +621,49 @@ class PygameUnoApp:
         font, _small, _big = self._fonts()
         mouse = pygame.mouse.get_pos()
         for button in self.buttons:
+            draw_rect = button.rect
             color = (240, 232, 220) if button.enabled else (224, 224, 218)
-            if button.enabled and button.rect.collidepoint(mouse):
+            if button.enabled and draw_rect.collidepoint(mouse):
                 color = (246, 218, 194)
-            pygame.draw.rect(self.screen, color, button.rect, border_radius=6)
-            pygame.draw.rect(self.screen, ACCENT if button.enabled else (184, 190, 188), button.rect, 2, border_radius=6)
+                draw_rect = draw_rect.inflate(2, 2)
+            pygame.draw.rect(self.screen, color, draw_rect, border_radius=6)
+            pygame.draw.rect(self.screen, ACCENT if button.enabled else (184, 190, 188), draw_rect, 2, border_radius=6)
             label = font.render(button.label, True, TEXT if button.enabled else MUTED)
-            self.screen.blit(label, label.get_rect(center=button.rect.center))
+            self.screen.blit(label, label.get_rect(center=draw_rect.center))
+
+    def _draw_click_feedback(self) -> None:
+        if not self.click_feedback or self.screen is None:
+            return
+        for pos, age in self.click_feedback:
+            alpha = max(0, int(110 * (1 - age / 0.24)))
+            radius = int(10 + 42 * (age / 0.24))
+            ripple = pygame.Surface((radius * 2 + 4, radius * 2 + 4), pygame.SRCALPHA)
+            pygame.draw.circle(ripple, (*ACCENT, alpha), (radius + 2, radius + 2), radius, 2)
+            self.screen.blit(ripple, (pos[0] - radius - 2, pos[1] - radius - 2))
+
+    def _draw_transition(self) -> None:
+        if self.transition_alpha <= 0 or self.screen is None:
+            return
+        overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+        overlay.fill((*TABLE_GREEN, min(210, self.transition_alpha)))
+        self.screen.blit(overlay, (0, 0))
+
+    def _draw_host_settings(self, state: dict[str, Any] | None) -> None:
+        if self.screen is None or not isinstance(self.session, OnlineGameSession) or not self.session.is_host:
+            return
+        self._draw_overlay("Host Settings")
+        connected = len([player for player in (state or {}).get("players", []) if player.get("connected", True)])
+        max_players = int((state or {}).get("max_players", 4))
+        lobby_locked = bool((state or {}).get("lobby_locked", False))
+        self._draw_text("Max Players", 420, 374, TEXT)
+        self._draw_text(str(max_players), 640, 374, MUTED, center=True)
+        self._add_button(710, 360, 42, 38, "-", "host_max_down", enabled=max_players > max(2, connected))
+        self._add_button(764, 360, 42, 38, "+", "host_max_up", enabled=max_players < 4)
+        self._draw_text("Lobby", 420, 424, TEXT)
+        self._draw_text("Locked" if lobby_locked else "Open", 640, 424, MUTED, center=True)
+        self._add_button(710, 410, 96, 38, "Toggle", "host_toggle_lock")
+        self._draw_text("Relay hosting prevents player-to-player IP exposure.", 640, 462, MUTED, center=True, size="small")
+        self._add_button(530, 515, 220, 44, "Close", "host_settings_close")
 
     def _add_button(self, x: int, y: int, w: int, h: int, label: str, action: str, payload: Any = None, enabled: bool = True) -> None:
         self.buttons.append(Button(pygame.Rect(x, y, w, h), label, action, payload, enabled))
@@ -652,8 +695,9 @@ class PygameUnoApp:
         return pygame.font.Font(path, 23), pygame.font.Font(path, 17), pygame.font.Font(path, 44)
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
-        for button in self.buttons:
+        for button in reversed(self.buttons):
             if button.enabled and button.rect.collidepoint(pos):
+                self.click_feedback.append((pos, 0.0))
                 self._handle_action(button.action, button.payload)
                 return
         if self.mode == "game" and self.pending_card is None:
@@ -670,12 +714,8 @@ class PygameUnoApp:
                 self._start_local(int(payload[0]), int(payload[1]))
             else:
                 self._start_local(int(payload or 2), 0)
-        elif action == "host_direct":
-            self._start_online_host(room_code=False)
         elif action == "host_room":
-            self._start_online_host(room_code=True)
-        elif action == "join_direct":
-            self._set_mode("join_direct")
+            self._set_mode("host_room")
             self.notice = ""
         elif action == "join_room":
             self._set_mode("join_room")
@@ -683,6 +723,16 @@ class PygameUnoApp:
         elif action == "settings":
             self._set_mode("settings")
             self.notice = ""
+        elif action == "host_settings":
+            self.host_settings_open = True
+        elif action == "host_settings_close":
+            self.host_settings_open = False
+        elif action == "host_max_down":
+            self._adjust_host_max_players(-1)
+        elif action == "host_max_up":
+            self._adjust_host_max_players(1)
+        elif action == "host_toggle_lock":
+            self._toggle_host_lock()
         elif action.startswith("toggle_"):
             self._toggle_setting(action.removeprefix("toggle_"))
         elif action == "volume_down":
@@ -742,27 +792,11 @@ class PygameUnoApp:
         self._set_mode("game")
         self.notice = ""
 
-    def _start_online_host(self, room_code: bool) -> None:
+    def _start_online_host(self, relay_host: str, name: str) -> None:
         self._close_session()
         try:
-            host = HostServer(host="127.0.0.1", port=0, on_log=lambda message: None)
-            thread = threading.Thread(target=host.start, daemon=True)
-            thread.start()
-            while host.port == 0:
-                time.sleep(0.01)
-            discovery = None
-            code = None
-            if room_code:
-                discovery = DiscoveryServer(host="127.0.0.1", port=5051, on_log=lambda message: None)
-                threading.Thread(target=discovery.start, daemon=True).start()
-                while discovery.port == 5051 and discovery._server_socket is None:
-                    time.sleep(0.01)
-                code = DiscoveryClient("127.0.0.1", discovery.port).create_room(host.port, "127.0.0.1")
-            self.session = OnlineGameSession("127.0.0.1", host.port, "Host", host, discovery, code)
-            if code:
-                self.session.info = f"Room {code} on discovery 127.0.0.1:{discovery.port if discovery else 5051}"
-            else:
-                self.session.info = f"Hosting on 127.0.0.1:{host.port}"
+            self.session = OnlineGameSession(relay_host, 5051, name, is_host=True)
+            self.session.info = "Hosting through relay"
             self._set_mode("game")
             self.notice = ""
         except Exception as exc:
@@ -772,15 +806,13 @@ class PygameUnoApp:
     def _connect_from_form(self) -> None:
         try:
             name = self.input_boxes[0].value or "Player"
-            if self.mode == "join_direct":
-                host = self.input_boxes[1].value or "127.0.0.1"
-                port = int(self.input_boxes[2].value or "5050")
-            else:
-                discovery_host = self.input_boxes[1].value or "127.0.0.1"
-                room_code = self.input_boxes[2].value.strip().upper()
-                host, port = DiscoveryClient(discovery_host, 5051).join_room(room_code)
+            relay_host = self.input_boxes[1].value or "127.0.0.1"
+            if self.mode == "host_room":
+                self._start_online_host(relay_host, name)
+                return
+            room_code = self.input_boxes[2].value.strip().upper()
             self._close_session()
-            self.session = OnlineGameSession(host, port, name)
+            self.session = OnlineGameSession(relay_host, 5051, name, is_host=False, room_code=room_code)
             self._set_mode("game")
             self.notice = ""
         except Exception as exc:
@@ -792,6 +824,7 @@ class PygameUnoApp:
         self.pending_card = None
         self.pending_color = None
         self.pending_pass_direction = None
+        self.host_settings_open = False
         self._set_mode("menu")
 
     def _close_session(self) -> None:
@@ -801,9 +834,22 @@ class PygameUnoApp:
 
     def _set_mode(self, mode: str) -> None:
         self.mode = mode
+        self.transition_alpha = 255
         scene = self.scenes.get(mode)
         if scene is not None:
             scene.enter()
+
+    def _adjust_host_max_players(self, delta: int) -> None:
+        if not isinstance(self.session, OnlineGameSession) or not self.session.is_host:
+            return
+        state = self.session.snapshot() or {}
+        self.session.client.host_settings(max_players=int(state.get("max_players", 4)) + delta)
+
+    def _toggle_host_lock(self) -> None:
+        if not isinstance(self.session, OnlineGameSession) or not self.session.is_host:
+            return
+        state = self.session.snapshot() or {}
+        self.session.client.host_settings(lobby_locked=not bool(state.get("lobby_locked", False)))
 
     def _toggle_setting(self, name: str) -> None:
         if not hasattr(self.user_settings, name):

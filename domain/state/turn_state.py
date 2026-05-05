@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from uno_game.config.enums import Direction
+from config.enums import Direction
 
 
 @dataclass

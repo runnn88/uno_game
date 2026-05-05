@@ -1,8 +1,8 @@
-from uno_game.application.commands.play_card import PlayCardCommand
-from uno_game.config.enums import CardRank
-from uno_game.domain.entities.card import Card
-from uno_game.domain.state.game_state import GameState
-from uno_game.rules.resolvers.wild_resolver import WildResolver
+from application.commands.play_card import PlayCardCommand
+from config.enums import CardRank
+from domain.entities.card import Card
+from domain.state.game_state import GameState
+from rules.resolvers.wild_resolver import WildResolver
 
 
 class WildDrawFourResolver(WildResolver):

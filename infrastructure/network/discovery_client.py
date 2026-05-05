@@ -1,8 +1,8 @@
 import socket
 
-from uno_game.config.constants import DEFAULT_DISCOVERY_PORT
-from uno_game.infrastructure.network.protocol import MessageType, NetworkMessage
-from uno_game.infrastructure.network.serializer import receive_message, send_message
+from config.constants import DEFAULT_DISCOVERY_PORT
+from infrastructure.network.protocol import MessageType, NetworkMessage
+from infrastructure.network.serializer import receive_message, send_message
 
 
 class DiscoveryClient:

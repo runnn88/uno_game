@@ -1,4 +1,4 @@
-from uno_game.infrastructure.network.protocol import NetworkMessage
+from infrastructure.network.protocol import NetworkMessage
 
 
 class ReplayLogger:

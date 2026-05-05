@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
 
-from uno_game.config.user_settings import UserSettings, load_user_settings, save_user_settings
+from config.user_settings import UserSettings, load_user_settings, save_user_settings
 
 
 class SettingsTests(unittest.TestCase):

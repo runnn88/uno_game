@@ -3,24 +3,24 @@ import threading
 import time
 from collections.abc import Callable
 
-from uno_game.application.commands.draw_card import DrawCardCommand
-from uno_game.application.commands.pass_turn import PassTurnCommand
-from uno_game.application.commands.play_card import PlayCardCommand
-from uno_game.application.commands.react_event import ReactEventCommand
-from uno_game.application.dto.game_state_dto import game_state_to_dto
-from uno_game.application.handlers.draw_handler import DrawHandler
-from uno_game.application.handlers.pass_turn_handler import PassTurnHandler
-from uno_game.application.handlers.play_card_handler import PlayCardHandler
-from uno_game.application.handlers.reaction_handler import ReactionHandler
-from uno_game.config.constants import DEFAULT_GAME_PORT, MAX_PLAYERS
-from uno_game.config.enums import CardColor, GamePhase, PassDirection
-from uno_game.core.event_bus import EventBus
-from uno_game.domain.entities.player import Player
-from uno_game.domain.state.game_state import GameState
-from uno_game.infrastructure.network.protocol import MessageType, NetworkMessage
-from uno_game.infrastructure.network.serializer import receive_message, send_message
-from uno_game.systems.setup.game_initializer import GameInitializer
-from uno_game.systems.turn.turn_manager import TurnManager
+from application.commands.draw_card import DrawCardCommand
+from application.commands.pass_turn import PassTurnCommand
+from application.commands.play_card import PlayCardCommand
+from application.commands.react_event import ReactEventCommand
+from application.dto.game_state_dto import game_state_to_dto
+from application.handlers.draw_handler import DrawHandler
+from application.handlers.pass_turn_handler import PassTurnHandler
+from application.handlers.play_card_handler import PlayCardHandler
+from application.handlers.reaction_handler import ReactionHandler
+from config.constants import DEFAULT_GAME_PORT, MAX_PLAYERS
+from config.enums import CardColor, GamePhase, PassDirection
+from core.event_bus import EventBus
+from domain.entities.player import Player
+from domain.state.game_state import GameState
+from infrastructure.network.protocol import MessageType, NetworkMessage
+from infrastructure.network.serializer import receive_message, send_message
+from systems.setup.game_initializer import GameInitializer
+from systems.turn.turn_manager import TurnManager
 
 
 class HostServer:
@@ -41,6 +41,8 @@ class HostServer:
         self.reaction_handler = ReactionHandler(self.events)
         self.initializer = GameInitializer()
         self.turns = TurnManager()
+        self.max_players = MAX_PLAYERS
+        self.lobby_locked = False
         self.clients: dict[socket.socket, str] = {}
         self.host_player_id: str | None = None
         self._server_socket: socket.socket | None = None
@@ -71,6 +73,13 @@ class HostServer:
             self._server_socket.close()
         for conn in list(self.clients):
             conn.close()
+
+    def configure_lobby(self, max_players: int | None = None, lobby_locked: bool | None = None) -> None:
+        with self._lock:
+            if max_players is not None:
+                self.max_players = max(2, min(MAX_PLAYERS, int(max_players)))
+            if lobby_locked is not None:
+                self.lobby_locked = bool(lobby_locked)
 
     def _handle_client(self, conn: socket.socket) -> None:
         file_obj = conn.makefile("rb")
@@ -152,7 +161,10 @@ class HostServer:
         if self.state.phase not in {GamePhase.MENU, GamePhase.LOBBY}:
             self._send_error(conn, "This game has already started")
             return
-        if len([player for player in self.state.players if player.connected]) >= MAX_PLAYERS:
+        if self.lobby_locked:
+            self._send_error(conn, "The lobby is locked")
+            return
+        if len([player for player in self.state.players if player.connected]) >= self.max_players:
             self._send_error(conn, "The room is full")
             return
         player_id = f"p{len(self.state.players) + 1}"

@@ -8,14 +8,14 @@ class PresentationTests(unittest.TestCase):
         os.environ["SDL_VIDEODRIVER"] = "dummy"
         import pygame
 
-        from uno_game.presentation.pygame_app import PygameUnoApp
+        from presentation.pygame_app import PygameUnoApp
 
         threading.Timer(0.2, lambda: pygame.event.post(pygame.event.Event(pygame.QUIT))).start()
         PygameUnoApp().run()
         self.assertFalse(pygame.get_init())
 
     def test_playable_preview_matches_stack_and_final_action_rules(self) -> None:
-        from uno_game.presentation.pygame_app import is_card_playable
+        from presentation.pygame_app import is_card_playable
 
         stack_state = {
             "top_card": {"id": "wild_draw_four_0", "color": "wild", "rank": "wild_draw_four"},

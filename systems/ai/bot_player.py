@@ -1,17 +1,17 @@
 from collections import Counter
 from random import Random
 
-from uno_game.application.commands.draw_card import DrawCardCommand
-from uno_game.application.commands.pass_turn import PassTurnCommand
-from uno_game.application.commands.play_card import PlayCardCommand
-from uno_game.application.handlers.draw_handler import DrawHandler
-from uno_game.application.handlers.pass_turn_handler import PassTurnHandler
-from uno_game.application.handlers.play_card_handler import PlayCardHandler
-from uno_game.config.enums import CardColor, CardRank, PassDirection
-from uno_game.domain.entities.card import Card
-from uno_game.domain.entities.player import Player
-from uno_game.domain.state.game_state import GameState
-from uno_game.rules.validator.move_validator import MoveValidator
+from application.commands.draw_card import DrawCardCommand
+from application.commands.pass_turn import PassTurnCommand
+from application.commands.play_card import PlayCardCommand
+from application.handlers.draw_handler import DrawHandler
+from application.handlers.pass_turn_handler import PassTurnHandler
+from application.handlers.play_card_handler import PlayCardHandler
+from config.enums import CardColor, CardRank, PassDirection
+from domain.entities.card import Card
+from domain.entities.player import Player
+from domain.state.game_state import GameState
+from rules.validator.move_validator import MoveValidator
 
 
 class BotPlayerController:

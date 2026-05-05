@@ -1,5 +1,5 @@
-from uno_game.config.enums import Direction
-from uno_game.domain.state.game_state import GameState
+from config.enums import Direction
+from domain.state.game_state import GameState
 
 
 class DirectionManager:

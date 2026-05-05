@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from uno_game.config.enums import CardColor, PassDirection
+from config.enums import CardColor, PassDirection
 
 
 @dataclass(frozen=True)

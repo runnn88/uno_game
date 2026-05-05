@@ -1,10 +1,10 @@
 from random import Random
 
-from uno_game.config.constants import MIN_PLAYERS, STARTING_HAND_SIZE
-from uno_game.config.enums import CardColor, CardRank, GamePhase
-from uno_game.domain.factories.deck_factory import build_uno_deck
-from uno_game.domain.state.game_state import GameState
-from uno_game.systems.draw.draw_manager import DrawManager
+from config.constants import MIN_PLAYERS, STARTING_HAND_SIZE
+from config.enums import CardColor, CardRank, GamePhase
+from domain.factories.deck_factory import build_uno_deck
+from domain.state.game_state import GameState
+from systems.draw.draw_manager import DrawManager
 
 
 class GameInitializer:

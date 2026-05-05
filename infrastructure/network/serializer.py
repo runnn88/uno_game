@@ -1,7 +1,7 @@
 import json
 import socket
 
-from uno_game.infrastructure.network.protocol import MessageType, NetworkMessage
+from infrastructure.network.protocol import MessageType, NetworkMessage
 
 
 class Serializer:

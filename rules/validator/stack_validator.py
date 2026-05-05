@@ -1,6 +1,6 @@
-from uno_game.config.enums import CardRank
-from uno_game.domain.entities.card import Card
-from uno_game.domain.state.game_state import GameState
+from config.enums import CardRank
+from domain.entities.card import Card
+from domain.state.game_state import GameState
 
 
 class StackValidator:

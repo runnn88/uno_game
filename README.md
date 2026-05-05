@@ -10,7 +10,7 @@ From this `uno_game/` folder:
 python main.py
 ```
 
-The pygame app includes local hotseat, host online, host room code, direct join, and room-code join.
+The pygame app includes local hotseat, bot games, relay-hosted room codes, and room-code join.
 Use the Settings page from the main menu to toggle sound, adjust volume, enable/disable placeholder background art, show/hide missing-card labels, and switch fullscreen.
 
 Install dependency if needed:
@@ -28,31 +28,18 @@ python run_tests.py
 Or, from the parent `Assignment4/` folder:
 
 ```bash
-python -m uno_game.main
+python -m main
 ```
 
 ## CLI Network Tools
 
-Start a local host without the pygame UI:
+Private relay room-code play:
 
 ```bash
-python main.py host --host 127.0.0.1 --port 5050
+python main.py relay --host 0.0.0.0 --port 5051
 ```
 
-Connect clients:
-
-```bash
-python main.py client --host 127.0.0.1 --port 5050 --name Alice
-python main.py client --host 127.0.0.1 --port 5050 --name Bob
-```
-
-Room-code discovery:
-
-```bash
-python main.py discovery --host 127.0.0.1 --port 5051
-python main.py host --host 127.0.0.1 --port 5050 --discovery-host 127.0.0.1
-python main.py client --room-code ABC12 --discovery-host 127.0.0.1 --name Alice
-```
+Run the relay on a neutral/server machine. Hosts and players connect to the relay and use only a room code; players do not connect directly to the host machine, so the host IP is not shared peer-to-peer.
 
 ## Architecture
 
@@ -73,16 +60,16 @@ The host is the single source of truth. Clients never mutate game state directly
 
 Client flow:
 
-1. Connect to host directly or resolve a room code through discovery.
+1. Connect to the relay server and create or join a room code.
 2. Send commands such as `PLAY_CARD`, `DRAW_CARD`, or `REACTION`.
 3. Receive `GAME_STATE` messages and render the latest state.
 
-Host flow:
+Relay/host flow:
 
-1. Accept clients and assign player IDs.
-2. Start the game, shuffle, and deal hands.
-3. Validate every incoming command.
-4. Apply rules and broadcast per-player state.
+1. The relay accepts clients and assigns room/player IDs.
+2. The first player in a room is the host and may start the game or lock the lobby.
+3. The relay validates every incoming command with the same host-authoritative rule engine.
+4. The relay applies rules and broadcasts per-player state.
 
 ## Card Assets
 

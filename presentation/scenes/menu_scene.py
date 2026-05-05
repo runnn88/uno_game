@@ -1,4 +1,4 @@
-from uno_game.presentation.scenes.base_scene import BaseScene
+from presentation.scenes.base_scene import BaseScene
 
 
 class MenuScene(BaseScene):

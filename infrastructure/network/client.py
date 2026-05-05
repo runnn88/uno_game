@@ -2,8 +2,8 @@ import socket
 import threading
 from collections.abc import Callable
 
-from uno_game.infrastructure.network.protocol import MessageType, NetworkMessage
-from uno_game.infrastructure.network.serializer import receive_message, send_message
+from infrastructure.network.protocol import MessageType, NetworkMessage
+from infrastructure.network.serializer import receive_message, send_message
 
 
 class GameClient:
@@ -15,10 +15,19 @@ class GameClient:
         self._running = False
 
     def connect(self, host: str, port: int, name: str) -> None:
+        self.connect_to_server(host, port)
+        self.send(NetworkMessage.of(MessageType.JOIN_ROOM, {"name": name}))
+
+    def connect_to_server(self, host: str, port: int) -> None:
         self.socket = socket.create_connection((host, port))
         self._running = True
         threading.Thread(target=self.receive_loop, daemon=True).start()
-        self.send(NetworkMessage.of(MessageType.JOIN_ROOM, {"name": name}))
+
+    def create_room(self, name: str) -> None:
+        self.send(NetworkMessage.of(MessageType.CREATE_ROOM, {"name": name}))
+
+    def join_room(self, room_code: str, name: str) -> None:
+        self.send(NetworkMessage.of(MessageType.JOIN_ROOM, {"room_code": room_code, "name": name}))
 
     def disconnect(self) -> None:
         self._running = False
@@ -32,6 +41,14 @@ class GameClient:
 
     def start_game(self) -> None:
         self.send(NetworkMessage.of(MessageType.START_GAME))
+
+    def host_settings(self, max_players: int | None = None, lobby_locked: bool | None = None) -> None:
+        payload: dict[str, object] = {}
+        if max_players is not None:
+            payload["max_players"] = max_players
+        if lobby_locked is not None:
+            payload["lobby_locked"] = lobby_locked
+        self.send(NetworkMessage.of(MessageType.HOST_SETTINGS, payload))
 
     def play_card(
         self,

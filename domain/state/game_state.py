@@ -1,11 +1,11 @@
 from dataclasses import dataclass, field
 
-from uno_game.config.enums import CardColor, GamePhase
-from uno_game.domain.entities.deck import Deck
-from uno_game.domain.entities.player import Player
-from uno_game.domain.state.effect_state import EffectState
-from uno_game.domain.state.reaction_state import ReactionState
-from uno_game.domain.state.turn_state import TurnState
+from config.enums import CardColor, GamePhase
+from domain.entities.deck import Deck
+from domain.entities.player import Player
+from domain.state.effect_state import EffectState
+from domain.state.reaction_state import ReactionState
+from domain.state.turn_state import TurnState
 
 
 @dataclass
