@@ -1,0 +1,2 @@
+"""Card effect resolvers."""
+

@@ -1,0 +1,2 @@
+"""UNO assignment game package."""
+
