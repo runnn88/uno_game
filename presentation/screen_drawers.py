@@ -207,14 +207,26 @@ def draw_instructions(app) -> None:
     assert app.screen is not None
     app.buttons.clear()
     app.input_boxes.clear()
-    app._draw_title("Instructions")
+    
+    title_font = app.fonts.get(70)
+    draw_outlined_text(
+        surface=app.screen,
+        text="Instruction",
+        font=title_font,
+        text_color=(255, 228, 21),  
+        outline_color=(0, 0, 0),     
+        x=450,                     
+        y=52,
+        thickness=5                  
+    )
+    
     app._add_button(28, 22, 92, 34, "Back", "menu")
 
-    app._draw_panel(pygame.Rect(76, 216, 546, 408), PANEL)
-    app._draw_panel(pygame.Rect(658, 216, 546, 408), PANEL_2)
+    app._draw_panel(pygame.Rect(73, 150, 554, 532), PANEL)
+    app._draw_panel(pygame.Rect(652, 150, 554, 532), PANEL_2)
 
-    app._draw_chip("Flow", 116, 248, ACCENT_2)
-    app._draw_text("How To Play", 116, 288, TEXT, size="big")
+    app._draw_chip("Flow", 93, 170, ACCENT_2)
+    app._draw_text("How To Play", 254, 170, TEXT, size="big")
     rules = [
         "Match the discard pile by color or rank. Wild cards can be played on any color.",
         "Click a playable card in your hand. Dimmed cards are not legal for the current turn.",
@@ -222,10 +234,10 @@ def draw_instructions(app) -> None:
         "When a draw penalty is active, you must stack a +2 or +4 with equal or higher value, otherwise draw the penalty.",
         "First player with no cards wins. Action cards cannot be played as your final card.",
     ]
-    app._draw_wrapped_lines(rules, 116, 340, 460, 26, TEXT, size="small")
+    app._draw_wrapped_lines(rules, 93, 274, 460, 26, TEXT, size="small")
 
-    app._draw_chip("Cards", 698, 248, ACCENT)
-    app._draw_text("Card Meanings", 698, 288, TEXT, size="big")
+    app._draw_chip("Cards", 698, 170, ACCENT)
+    app._draw_text("Card Meanings", 842, 170, TEXT, size="big")
     cards = [
         "0: choose clockwise or counter-clockwise, then all players pass hands in that direction.",
         "7: choose another player and swap hands with them.",
