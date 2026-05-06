@@ -19,13 +19,14 @@ from presentation.game_feedback import CardMotion, GameFeedback, Toast
 from presentation.game_sessions import LocalGameSession, OnlineGameSession
 from presentation.rendering.gameplay_effects import draw_card_motions, draw_toasts
 from presentation.rendering.card_renderer import CardRenderer
-from presentation.screen_drawers import draw_instructions, draw_join, draw_play_menu, draw_main_menu, draw_settings
+from presentation.screen_drawers import draw_instructions, draw_join, draw_play_menu, draw_main_menu, draw_settings, draw_choose_mode
 from presentation.scenes.end_scene import EndScene
 from presentation.scenes.game_scene import GameScene
 from presentation.scenes.instructions_scene import InstructionsScene
 from presentation.scenes.lobby_scene import LobbyScene
 from presentation.scenes.menu_scene import MenuScene
 from presentation.scenes.settings_scene import SettingsScene
+from presentation.scenes.choose_mode import ChooseModeScene
 from presentation.theme import (
     ACCENT,
     BAD,
@@ -88,6 +89,7 @@ class PygameUnoApp:
             "end": EndScene(self),
             "settings": SettingsScene(self),
             "instructions": InstructionsScene(self),
+            "choose_mode": ChooseModeScene(self),
         }
 
     def run(self) -> None:
@@ -114,7 +116,7 @@ class PygameUnoApp:
                 self.running = False
                 continue
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                if self.mode in {"game", "host_room", "join_room", "settings", "instructions"}:
+                if self.mode in {"game", "host_room", "join_room", "settings", "instructions", "choose_mode"}:
                     self._go_menu()
                 else:
                     self.running = False
@@ -170,6 +172,9 @@ class PygameUnoApp:
         
     def _draw_play_menu(self) -> None:
         draw_play_menu(self)
+
+    def _draw_choose_mode(self) -> None:
+        draw_choose_mode(self)
 
     def _draw_instructions(self) -> None:
         draw_instructions(self)
@@ -391,22 +396,24 @@ class PygameUnoApp:
 
     def _draw_background(self, name: str) -> None:
         assert self.screen is not None
-        self._draw_table_texture()
+        # self._draw_table_texture()
         if self.card_renderer is None:
             return
         if not self.user_settings.show_background_art:
+            self.screen.fill(TABLE_GREEN)
             return
         # Optional backgrounds use assets/images/placeholder.jfif until real art is added.
         image = self.card_renderer.assets.load_background(name)
         if image is None:
+            self.screen.fill(TABLE_GREEN)
             return
         scaled = pygame.transform.smoothscale(image, self.screen.get_size())
-        scaled.set_alpha(34 if name == "table_background" else 46)
+        scaled.set_alpha(34 if name == "table_background" else 255)
         self.screen.blit(scaled, (0, 0))
 
     def _draw_title(self, title: str) -> None:
         self._draw_text(title, 640, 130, TEXT, center=True, size="big")
-        self._draw_text("Host-authoritative UNO with local play, bots, and relay room codes", 640, 174, MUTED, center=True)
+        # self._draw_text("Host-authoritative UNO with local play, bots, and relay room codes", 640, 174, MUTED, center=True)
 
     def _draw_buttons(self) -> None:
         assert self.screen is not None
@@ -573,6 +580,10 @@ class PygameUnoApp:
                 self._start_local(int(payload[0]), int(payload[1]))
             else:
                 self._start_local(int(payload or 2), 0)
+        elif action == "choose_mode":
+            self._set_mode("choose_mode")
+            self.notice = ""
+            self.notice_overlay = None
         elif action == "host_room":
             self._set_mode("host_room")
             self.notice = ""

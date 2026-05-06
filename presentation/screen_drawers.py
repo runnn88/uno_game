@@ -68,6 +68,40 @@ def draw_play_menu(app) -> None:
     app._draw_menu_cards()
     app._draw_text("Match color or rank, stack draw cards, and use special 0/7/8 rules.", 118, 560, MUTED, size="small")
 
+    app._draw_text("Main Menu", 602, 168, TEXT, size="big")
+    app._draw_text("Choose what you want to do next.", 604, 214, MUTED)
+    x = 604
+    y = 258
+    app._add_button(x, y, 402, 50, "Play", "choose_mode")
+    app._add_button(x, y + 64, 402, 50, "Settings", "settings")
+    app._add_button(x, y + 128, 402, 50, "Instructions", "instructions")
+
+    if app.notice:
+        app._draw_text(app.notice, 640, 676, BAD, center=True)
+    if not app.notice_overlay:
+        app._draw_buttons()
+    app._draw_notice_overlay()
+
+
+def draw_choose_mode(app) -> None:
+    assert app.screen is not None
+    app.buttons.clear()
+    app.input_boxes.clear()
+    app._draw_title("UNO Online")
+
+    hero = pygame.Rect(76, 124, 430, 500)
+    menu = pygame.Rect(548, 124, 656, 500)
+    app._draw_panel(hero, (251, 248, 236))
+    app._draw_panel(menu, PANEL)
+
+    app._draw_text("Fast local play", 116, 170, TEXT, size="big")
+    app._draw_text("or relay-hosted rooms", 118, 218, MUTED)
+    app._draw_chip("Hotseat", 118, 274, ACCENT_2)
+    app._draw_chip("Bots", 230, 274, GOOD)
+    app._draw_chip("Room Code", 315, 274, ACCENT)
+    app._draw_menu_cards()
+    app._draw_text("Match color or rank, stack draw cards, and use special 0/7/8 rules.", 118, 560, MUTED, size="small")
+
     app._draw_text("Choose Mode", 602, 168, TEXT, size="big")
     app._draw_text("Local games start immediately. Online games use room codes.", 604, 214, MUTED)
     x = 604
@@ -130,31 +164,48 @@ def draw_settings(app) -> None:
     assert app.screen is not None
     app.buttons.clear()
     app.input_boxes.clear()
+    app._draw_background("menu_background")
     app._draw_title("Settings")
-    app._draw_panel(pygame.Rect(350, 210, 580, 360), PANEL)
+
+    # Main settings panel drawn as semi-transparent surface (30% black)
+    settings_panel = pygame.Rect(320, 200, 640, 400)
+    panel_surf = pygame.Surface((settings_panel.width, settings_panel.height), pygame.SRCALPHA)
+    panel_surf.fill((0, 0, 0, 76))  # 30% opaque black
+    app.screen.blit(panel_surf, settings_panel.topleft)
+    
+    pygame.draw.rect(app.screen, (50, 50, 50), settings_panel, width=2, border_radius=8)
+
     rows = [
-        ("Sound", "sound_enabled", "On" if app.user_settings.sound_enabled else "Off"),
         ("Volume", "volume", f"{int(app.user_settings.volume * 100)}%"),
-        ("Background Art", "show_background_art", "On" if app.user_settings.show_background_art else "Off"),
-        ("Missing Card Labels", "show_missing_card_labels", "On" if app.user_settings.show_missing_card_labels else "Off"),
         ("Fullscreen", "fullscreen", "On" if app.user_settings.fullscreen else "Off"),
     ]
-    y = 248
+
+    y = 260
     font, small, _big = app._fonts()
+
+    # Draw semi-transparent overlay for each settings row
     for label, key, value in rows:
-        row_rect = pygame.Rect(386, y - 4, 508, 46)
+        row_rect = pygame.Rect(360, y - 10, 560, 60)
+        overlay = pygame.Surface((row_rect.width, row_rect.height), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 0))  # 30% opaque black
+        app.screen.blit(overlay, row_rect.topleft)
+
         SettingsRow(row_rect, label, value).draw(app.screen, font, small)
+
         if key == "volume":
             app._add_button(740, y, 42, 38, "-", "volume_down")
             app._add_button(794, y, 42, 38, "+", "volume_up")
         else:
             app._add_button(740, y, 112, 38, "Toggle", f"toggle_{key}")
-        y += 55
-    app._add_button(410, 592, 205, 44, "Save", "save_settings")
-    app._add_button(666, 592, 205, 44, "Back", "menu")
-    app._draw_text("Settings are saved to config/user_settings.json.", 640, 640, MUTED, center=True)
+        y += 80
+
+    app._add_button(380, 520, 180, 48, "Save", "save_settings")
+    app._add_button(720, 520, 180, 48, "Back", "menu")
+    # app._draw_text("Settings are saved to config/user_settings.json.", 640, 600, MUTED, center=True)
+
     if app.notice:
-        app._draw_text(app.notice, 640, 670, GOOD, center=True)
+        app._draw_text(app.notice, 640, 640, GOOD, center=True)
+
     app._draw_buttons()
 
 
