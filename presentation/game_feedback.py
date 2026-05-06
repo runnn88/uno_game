@@ -53,6 +53,7 @@ class GameFeedback:
         self._notify_phase_changes(previous, state)
         self._notify_top_card_change(previous, state)
         self._notify_count_changes(previous, state)
+        self._notify_uno_call(previous, state)
         self._notify_reaction_changes(previous, state)
         self._notify_turn_change(previous, state)
         self.host._last_game_state = state
@@ -96,10 +97,36 @@ class GameFeedback:
             if delta <= 0:
                 continue
             actor = self._name_for(state, player_id)
+            if int(player.get("card_count", 0)) == 1:
+                title = "UNO!" if player_id == self._viewer_id() else f"{actor} has UNO!"
+                body = "One card left. Call UNO and guard your final play." if player_id == self._viewer_id() else "They are down to one card. The table is on alert."
+                self.push_toast(title, body, GOOD if player_id == self._viewer_id() else ACCENT_2, duration=4.6)
+                continue
             title = f"You drew {delta} card{'s' if delta != 1 else ''}!" if player_id == self._viewer_id() else f"{actor} drew {delta} card{'s' if delta != 1 else ''}!"
             body = self._draw_body(previous, state, player_id)
             self.push_toast(title, body, BAD if delta >= 2 else ACCENT)
             self.animate_cards(self._deck_anchor(), self._player_anchor(state, player_id), min(4, delta), face_down=True)
+
+        for player in state.get("players", []):
+            player_id = player.get("id")
+            if player_id not in previous_players:
+                continue
+            old_count = int(previous_players[player_id].get("card_count", 0))
+            new_count = int(player.get("card_count", 0))
+            if old_count > 1 and new_count == 1:
+                actor = self._name_for(state, player_id)
+                title = "UNO!" if player_id == self._viewer_id() else f"{actor} has UNO!"
+                body = "One card left. Call UNO and guard your final play." if player_id == self._viewer_id() else "They are down to one card. The table is on alert."
+                self.push_toast(title, body, GOOD if player_id == self._viewer_id() else ACCENT_2, duration=4.6)
+
+    def _notify_uno_call(self, previous: dict[str, Any], state: dict[str, Any]) -> None:
+        if int(previous.get("uno_call_sequence", 0)) == int(state.get("uno_call_sequence", 0)):
+            return
+        player_id = state.get("uno_call_player_id")
+        actor = self._name_for(state, player_id)
+        title = "You called UNO!" if player_id == self._viewer_id() else f"{actor} called UNO!"
+        body = "The table heard it. Finish strong." if player_id == self._viewer_id() else "Only one card remains in their hand."
+        self.push_toast(title, body, GOOD if player_id == self._viewer_id() else ACCENT_2, duration=4.6)
 
     def _notify_reaction_changes(self, previous: dict[str, Any], state: dict[str, Any]) -> None:
         old_reaction = previous.get("reaction", {})

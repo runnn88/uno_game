@@ -18,6 +18,8 @@ class GameState:
     phase: GamePhase = GamePhase.MENU
     active_color: CardColor | None = None
     winner_id: str | None = None
+    uno_call_player_id: str | None = None
+    uno_call_sequence: int = 0
 
     @classmethod
     def empty(cls) -> "GameState":

@@ -32,6 +32,8 @@ class RelayCommandProcessor:
             self.draw_handler.handle(room.state, DrawCardCommand(player_id, message.payload.get("count", 1)))
         elif message.type == MessageType.PASS_TURN:
             self.pass_handler.handle(room.state, PassTurnCommand(player_id))
+        elif message.type == MessageType.CALL_UNO:
+            self._call_uno(room, player_id)
         elif message.type == MessageType.REACTION:
             self.reaction_handler.handle(room.state, ReactEventCommand(player_id))
         else:
@@ -66,3 +68,10 @@ class RelayCommandProcessor:
                 PassDirection(message.payload["pass_direction"]) if message.payload.get("pass_direction") else None,
             ),
         )
+
+    def _call_uno(self, room: RelayRoom, player_id: str) -> None:
+        player = room.state.player_by_id(player_id)
+        if len(player.hand.cards) != 1:
+            raise ValueError("You can only call UNO with one card left")
+        room.state.uno_call_player_id = player_id
+        room.state.uno_call_sequence += 1

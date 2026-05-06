@@ -54,7 +54,11 @@ class RelayServer:
         file_obj = conn.makefile("rb")
         try:
             while self._running:
-                message = receive_message(file_obj)
+                try:
+                    message = receive_message(file_obj)
+                except ValueError as exc:
+                    self._send_error(conn, f"Unsupported client message: {exc}")
+                    break
                 if message is None:
                     break
                 self.process_message(conn, message)

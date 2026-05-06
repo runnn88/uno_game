@@ -4,6 +4,8 @@ import unittest
 import socket
 
 import main
+from config.enums import CardColor, CardRank
+from domain.entities.card import Card
 from infrastructure.network.client import GameClient
 from infrastructure.network.relay_server import RelayServer
 
@@ -90,6 +92,53 @@ class NetworkTests(unittest.TestCase):
         finally:
             host.disconnect()
             guest.disconnect()
+            relay.stop()
+
+    def test_relay_broadcasts_call_uno(self) -> None:
+        relay = RelayServer(host="127.0.0.1", port=0)
+        thread = threading.Thread(target=relay.start, daemon=True)
+        thread.start()
+        while relay.port == 0:
+            time.sleep(0.01)
+
+        room_codes: list[str] = []
+        guest_states: list[dict] = []
+        host = GameClient(lambda message: room_codes.append(str(message.payload["room_code"])) if message.type.value == "ROOM_CREATED" else None)
+        guest = GameClient(lambda message: guest_states.append(message.payload) if message.type.value == "GAME_STATE" else None)
+        try:
+            host.connect_to_server("127.0.0.1", relay.port)
+            host.create_room("Host")
+            time.sleep(0.2)
+            guest.connect_to_server("127.0.0.1", relay.port)
+            guest.join_room(room_codes[-1], "Guest")
+            time.sleep(0.2)
+
+            room = relay.rooms[room_codes[-1]]
+            room.state.player_by_id("p1").hand.cards = [Card("red_1_0", CardColor.RED, CardRank.ONE)]
+            host.call_uno()
+            time.sleep(0.2)
+
+            self.assertEqual(guest_states[-1].get("uno_call_player_id"), "p1")
+            self.assertEqual(guest_states[-1].get("uno_call_sequence"), 1)
+        finally:
+            host.disconnect()
+            guest.disconnect()
+            relay.stop()
+
+    def test_relay_rejects_unknown_message_without_crashing(self) -> None:
+        relay = RelayServer(host="127.0.0.1", port=0)
+        thread = threading.Thread(target=relay.start, daemon=True)
+        thread.start()
+        while relay.port == 0:
+            time.sleep(0.01)
+
+        try:
+            with socket.create_connection(("127.0.0.1", relay.port), timeout=1.0) as sock:
+                sock.sendall(b'{"type":"NOT_A_REAL_MESSAGE","payload":{}}\n')
+                response = sock.recv(1024).decode("utf-8")
+            self.assertIn("Unsupported client message", response)
+            self.assertTrue(relay._running)
+        finally:
             relay.stop()
 
     def test_stop_relay_command_stops_listener(self) -> None:

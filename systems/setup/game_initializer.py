@@ -29,6 +29,8 @@ class GameInitializer:
         state.turn.pending_draw = 0
         state.turn.skip_next = False
         state.winner_id = None
+        state.uno_call_player_id = None
+        state.uno_call_sequence = 0
         state.phase = GamePhase.PLAYING
 
     def _opening_card(self, state: GameState):

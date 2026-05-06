@@ -78,6 +78,9 @@ class GameClient:
     def pass_turn(self) -> None:
         self.send(NetworkMessage.of(MessageType.PASS_TURN))
 
+    def call_uno(self) -> None:
+        self.send(NetworkMessage.of(MessageType.CALL_UNO))
+
     def react(self) -> None:
         self.send(NetworkMessage.of(MessageType.REACTION))
 

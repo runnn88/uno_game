@@ -28,6 +28,8 @@ class GameStateDTO:
     drawn_card_id: str | None
     phase: str
     winner_id: str | None
+    uno_call_player_id: str | None
+    uno_call_sequence: int
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -43,6 +45,8 @@ class GameStateDTO:
             "drawn_card_id": self.drawn_card_id,
             "phase": self.phase,
             "winner_id": self.winner_id,
+            "uno_call_player_id": self.uno_call_player_id,
+            "uno_call_sequence": self.uno_call_sequence,
         }
 
 
@@ -74,4 +78,6 @@ def game_state_to_dto(state: GameState, viewer_player_id: str | None = None) -> 
         drawn_card_id=state.turn.drawn_card_id,
         phase=state.phase.value,
         winner_id=state.winner_id,
+        uno_call_player_id=state.uno_call_player_id,
+        uno_call_sequence=state.uno_call_sequence,
     )

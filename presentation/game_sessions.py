@@ -80,6 +80,20 @@ class LocalGameSession:
 
         self._run(lambda: PassTurnHandler().handle(self.state, PassTurnCommand(player_id)))
 
+    def call_uno(self) -> None:
+        player_id = self.player_id
+        if player_id is None:
+            return
+
+        def run() -> None:
+            player = self.state.player_by_id(player_id)
+            if len(player.hand.cards) != 1:
+                raise ValueError("You can only call UNO with one card left")
+            self.state.uno_call_player_id = player_id
+            self.state.uno_call_sequence += 1
+
+        self._run(run)
+
     def react(self, player_id: str | None = None) -> None:
         target = player_id or self.player_id
         if target is not None:
@@ -174,6 +188,9 @@ class OnlineGameSession:
 
     def pass_turn(self) -> None:
         self._run_network("pass the turn", self.client.pass_turn)
+
+    def call_uno(self) -> None:
+        self._run_network("call UNO", self.client.call_uno)
 
     def react(self, player_id: str | None = None) -> None:
         self._run_network("send your reaction", self.client.react)

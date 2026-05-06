@@ -213,6 +213,8 @@ class PygameUnoApp:
             else:
                 draw_label = "Draw Penalty" if state.get("pending_draw", 0) else "Draw"
                 self._add_button(1070, 612, 150, 44, draw_label, "draw", enabled=current == me)
+            if my_player and int(my_player.get("card_count", 0)) == 1:
+                self._add_button(1055, 520, 174, 44, "Call UNO", "call_uno", enabled=True)
 
         if phase == "ended":
             winner = self._player_name(players, state.get("winner_id"))
@@ -611,6 +613,9 @@ class PygameUnoApp:
             self.sounds.play("card_draw")
         elif action == "pass_turn" and self.session:
             self.session.pass_turn()
+        elif action == "call_uno" and self.session:
+            self.session.call_uno()
+            self.sounds.play("reaction_hit")
         elif action == "react" and self.session:
             self.session.react()
             self.sounds.play("reaction_hit")
