@@ -3,35 +3,102 @@ import pygame
 from presentation.theme import ACCENT, ACCENT_2, BAD, GOOD, MUTED, PANEL, PANEL_2, TEXT
 from presentation.ui.components.settings_row import SettingsRow
 
-
+def draw_outlined_text(
+    surface: pygame.Surface, 
+    text: str, 
+    font: pygame.font.Font, 
+    text_color: tuple[int, int, int], 
+    outline_color: tuple[int, int, int], 
+    x: int, 
+    y: int, 
+    thickness: int = 2, 
+    angle: float = 0
+) -> None:
+    """Draw text has outlier and rotate."""
+    base_text = font.render(text, True, outline_color)
+    inner_text = font.render(text, True, text_color)
+    
+    if angle != 0:
+        base_text = pygame.transform.rotate(base_text, angle)
+        inner_text = pygame.transform.rotate(inner_text, angle)
+        
+    step = max(1, thickness // 2)
+    
+    for dx in range(-thickness, thickness + 1, step):
+        for dy in range(-thickness, thickness + 1, step):
+            if dx == 0 and dy == 0:
+                continue
+            surface.blit(base_text, (x + dx, y + dy))
+            
+    surface.blit(inner_text, (x, y))
+    
 def draw_main_menu(app) -> None:
     assert app.screen is not None
-    app.screen.fill((255, 255, 255)) 
+    
+    bg_img = app.card_renderer.assets.load_background("menu_background") if app.card_renderer else None
+    if bg_img:
+        bg_img = pygame.transform.smoothscale(bg_img, app.screen.get_size())
+        app.screen.blit(bg_img, (0, 0))
+    else:
+        app.screen.fill((255, 255, 255))
     
     if app.card_renderer:
-        card_img = app.card_renderer.assets.load_card_back()
-        if card_img:
-            card_img = pygame.transform.smoothscale(card_img, (97, 139))
-            fan_data = [
-                (500, 140, 35), (539, 105, 24), (582, 75, 8), 
-                (644, 66, -9), (701, 72, -30)
-            ]
-            for x, y, angle in fan_data:
+        from domain.entities.card import Card
+        from config.enums import CardColor, CardRank
+        cards_to_draw = [
+            Card("c1", CardColor.RED, CardRank.FIVE),
+            Card("c2", CardColor.BLUE, CardRank.SKIP),
+            Card("c3", CardColor.YELLOW, CardRank.REVERSE),
+            Card("c4", CardColor.GREEN, CardRank.DRAW_TWO),
+            Card("c5", CardColor.WILD, CardRank.WILD)
+        ]
+        
+        fan_positions = [
+            (500, 85, 35), (539, 66, 24), (582, 63, 8), 
+            (622, 66, -9), (632, 72, -30)
+        ]
+        for i, (x, y, angle) in enumerate(fan_positions):
+            if i < len(cards_to_draw):
+                card_img = app.card_renderer.assets.load(cards_to_draw[i])
+            else:
+                card_img = app.card_renderer.assets.load_card_back()
+                
+            if card_img:
+                card_img = pygame.transform.smoothscale(card_img, (97, 139))
                 rotated = pygame.transform.rotate(card_img, angle)
                 app.screen.blit(rotated, (x, y))
 
-    pygame.draw.ellipse(app.screen, (255, 255, 255), (442, 190, 407, 143))
+    # The white oval base
+    ellipse_width, ellipse_height = 410, 142
+    ellipse_surf = pygame.Surface((ellipse_width, ellipse_height), pygame.SRCALPHA)
+    pygame.draw.ellipse(ellipse_surf, (255, 255, 255), (0, 0, ellipse_width, ellipse_height))
+    rotation_angle = 10.75
+    rotated_ellipse = pygame.transform.rotate(ellipse_surf, rotation_angle)
+    
+    original_center = (442 + ellipse_width // 2, 150 + ellipse_height // 2)
+    ellipse_rect = rotated_ellipse.get_rect(center=original_center)
+    
+    app.screen.blit(rotated_ellipse, ellipse_rect.topleft)
 
     title_font = app.fonts.get(160)
+    draw_outlined_text(
+        surface=app.screen,
+        text="UNO",
+        font=title_font,
+        text_color=(237, 92, 115),
+        outline_color=(0, 0, 0),
+        x=471,
+        y=102,
+        thickness=14, 
+        angle=9.63
+    )
+
+    # Buttons
     btn_font = app.fonts.get(28)
-
-    uno_text = title_font.render("UNO", True, (237, 92, 115))
-    app.screen.blit(pygame.transform.rotate(uno_text, 10), (471, 157))
-
     app.buttons.clear()
     buttons_data = [
-        ("Play", 552, 360, "play_menu", (253, 238, 103), (253, 247, 195)),
-        ("Instruction", 552, 456, "instruction", (253, 133, 130), (255, 200, 199)),
+        ("Play", 552, 360, "choose_mode", (253, 238, 103), (253, 247, 195)),
+        ("Instruction", 552, 456, "instructions", (253, 133, 130), (255, 200, 199)),
         ("Settings", 552, 552, "settings", (253, 238, 103), (253, 247, 195))
     ]
     
@@ -46,8 +113,21 @@ def draw_main_menu(app) -> None:
         pygame.draw.rect(app.screen, border_color, draw_rect.inflate(12, 12), border_radius=20)
         pygame.draw.rect(app.screen, bg_color, draw_rect, border_radius=20)
         
-        text_surf = btn_font.render(label, True, (255, 255, 255))
-        app.screen.blit(text_surf, text_surf.get_rect(center=draw_rect.center))
+        text_w, text_h = btn_font.size(label)
+        text_x = draw_rect.centerx - text_w // 2
+        text_y = draw_rect.centery - text_h // 2
+        
+        draw_outlined_text(
+            surface=app.screen,
+            text=label,
+            font=btn_font,
+            text_color=(255, 255, 255),  
+            outline_color=(0, 0, 0),  
+            x=text_x,
+            y=text_y,
+            thickness=2
+        )
+        
         
 def draw_play_menu(app) -> None:
     assert app.screen is not None

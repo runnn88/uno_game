@@ -6,7 +6,7 @@ class FontManager:
         package_root = Path(__file__).resolve().parents[2]
         self.assets_root = assets_root or package_root / "assets" / "fonts"
         
-        self.font_file = "SansitaOne-Regular.ttf" 
+        self.font_file = "SansitaOne.ttf" 
         
         self._cache: dict[int, pygame.font.Font] = {}
 

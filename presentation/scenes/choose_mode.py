@@ -8,6 +8,7 @@ class ChooseModeScene(BaseScene):
         self.app.hand_targets.clear()
         self.app.pending_card = None
         self.app.pending_color = None
+        self.app.notice_overlay = None
 
     def draw(self, surface) -> None:
         self.app._draw_background("menu_background")
