@@ -7,7 +7,8 @@ from typing import Any
 
 import pygame
 
-from config.constants import DEFAULT_RELAY_HOST, DEFAULT_RELAY_PORT
+from config.constants import DEFAULT_RELAY_URL
+from config.env import load_env
 from config.enums import CardColor, CardRank
 from config.settings import DEFAULT_SETTINGS
 from config.user_settings import UserSettings, load_user_settings, save_user_settings
@@ -670,12 +671,14 @@ class PygameUnoApp:
         self._begin_online_connection(name, room_code)
 
     def _relay_endpoint(self) -> tuple[str, int]:
-        host = os.environ.get("UNO_RELAY_HOST", DEFAULT_RELAY_HOST)
-        port = int(os.environ.get("UNO_RELAY_PORT", str(DEFAULT_RELAY_PORT)))
-        return host, port
+        relay_url = self._relay_url()
+        return parse_relay_url(relay_url)
+
+    def _relay_url(self) -> str:
+        load_env()
+        return os.environ.get("UNO_RELAY_URL", DEFAULT_RELAY_URL).strip() or DEFAULT_RELAY_URL
 
     def _begin_online_connection(self, name: str, room_code: str | None) -> None:
-        relay_host, relay_port = self._relay_endpoint()
         is_host = self.mode == "host_room"
         self._connection_id += 1
         token = self._connection_id
@@ -685,7 +688,13 @@ class PygameUnoApp:
 
         def worker() -> None:
             try:
-                session = OnlineGameSession(relay_host, relay_port, name, is_host=is_host, room_code=room_code)
+                if is_host:
+                    relay_host, relay_port = self._relay_endpoint()
+                    target_room_code = None
+                else:
+                    relay_host, relay_port = self._relay_endpoint()
+                    target_room_code = room_code
+                session = OnlineGameSession(relay_host, relay_port, name, is_host=is_host, room_code=target_room_code)
                 session.info = "Hosting through relay" if is_host else "Connected through relay"
                 result = (token, True, session, "")
             except Exception as exc:
@@ -730,9 +739,10 @@ class PygameUnoApp:
     def _copy_room_code(self) -> None:
         if not isinstance(self.session, OnlineGameSession) or not self.session.room_code:
             return
+        code = self.session.room_code
         try:
-            self._copy_text_to_clipboard(self.session.room_code)
-            self.feedback.push_toast("Room code copied!", f"{self.session.room_code} is ready to paste.", GOOD, duration=2.6)
+            self._copy_text_to_clipboard(code)
+            self.feedback.push_toast("Room code copied!", f"{code} is ready to paste.", GOOD, duration=2.6)
         except Exception as exc:
             self.feedback.push_toast("Copy failed", str(exc), BAD, duration=3.0)
 
@@ -880,6 +890,21 @@ class PygameUnoApp:
 
 def card_from_dict(data: dict[str, str]) -> Card:
     return Card(data["id"], CardColor(data["color"]), CardRank(data["rank"]))
+
+
+def parse_relay_url(relay_url: str) -> tuple[str, int]:
+    cleaned = relay_url.strip()
+    if "://" in cleaned:
+        _scheme, cleaned = cleaned.split("://", 1)
+    try:
+        host, raw_port = cleaned.rsplit(":", 1)
+        port = int(raw_port)
+    except ValueError as exc:
+        raise ValueError("Relay URL must look like tcp://HOST:PORT.") from exc
+    host = host.strip()
+    if not host or port <= 0:
+        raise ValueError("Relay URL must include host and port.")
+    return host, port
 
 
 def is_card_playable(card: dict[str, str], state: dict[str, Any]) -> bool:

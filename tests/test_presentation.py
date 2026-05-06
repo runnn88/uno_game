@@ -17,7 +17,9 @@ class PresentationTests(unittest.TestCase):
         self.assertFalse(pygame.get_init())
 
     def test_playable_preview_matches_stack_and_final_action_rules(self) -> None:
-        from presentation.pygame_app import is_card_playable
+        from presentation.pygame_app import is_card_playable, parse_relay_url
+
+        self.assertEqual(parse_relay_url("tcp://relay.example.com:5051"), ("relay.example.com", 5051))
 
         stack_state = {
             "top_card": {"id": "wild_draw_four_0", "color": "wild", "rank": "wild_draw_four"},
@@ -79,8 +81,8 @@ class PresentationTests(unittest.TestCase):
         while relay.port == 0:
             time.sleep(0.01)
 
-        os.environ["UNO_RELAY_HOST"] = "127.0.0.1"
-        os.environ["UNO_RELAY_PORT"] = str(relay.port)
+        previous_relay_url = os.environ.get("UNO_RELAY_URL")
+        os.environ["UNO_RELAY_URL"] = f"tcp://127.0.0.1:{relay.port}"
         app = PygameUnoApp()
         app.mode = "join_room"
         app.input_boxes = [
@@ -100,8 +102,10 @@ class PresentationTests(unittest.TestCase):
             self.assertIn("Room not found", app.notice)
         finally:
             relay.stop()
-            os.environ.pop("UNO_RELAY_HOST", None)
-            os.environ.pop("UNO_RELAY_PORT", None)
+            if previous_relay_url is None:
+                os.environ.pop("UNO_RELAY_URL", None)
+            else:
+                os.environ["UNO_RELAY_URL"] = previous_relay_url
 
     def test_action_exception_returns_to_menu_with_notice(self) -> None:
         from presentation.pygame_app import PygameUnoApp

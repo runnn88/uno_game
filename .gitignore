@@ -22,6 +22,7 @@ dist/
 
 # Local runtime/settings files
 config/user_settings.json
+.env
 *.log
 logs/
 
