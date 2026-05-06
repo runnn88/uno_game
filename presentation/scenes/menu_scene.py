@@ -10,5 +10,9 @@ class MenuScene(BaseScene):
         self.app.pending_color = None
 
     def draw(self, surface) -> None:
-        self.app._draw_background("menu_background")
-        self.app._draw_menu()
+        
+        if self.app.mode == "play_menu":  
+            self.app._draw_background("menu_background")
+            self.app._draw_play_menu()
+        else: 
+            self.app._draw_main_menu()

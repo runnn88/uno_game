@@ -14,11 +14,12 @@ from config.settings import DEFAULT_SETTINGS
 from config.user_settings import UserSettings, load_user_settings, save_user_settings
 from domain.entities.card import Card
 from presentation.audio.sound_manager import SoundManager
+from presentation.rendering.font_manager import FontManager
 from presentation.game_feedback import CardMotion, GameFeedback, Toast
 from presentation.game_sessions import LocalGameSession, OnlineGameSession
 from presentation.rendering.gameplay_effects import draw_card_motions, draw_toasts
 from presentation.rendering.card_renderer import CardRenderer
-from presentation.screen_drawers import draw_instructions, draw_join, draw_menu, draw_settings
+from presentation.screen_drawers import draw_instructions, draw_join, draw_play_menu, draw_main_menu, draw_settings
 from presentation.scenes.end_scene import EndScene
 from presentation.scenes.game_scene import GameScene
 from presentation.scenes.instructions_scene import InstructionsScene
@@ -57,6 +58,7 @@ class PygameUnoApp:
         self.session: LocalGameSession | OnlineGameSession | None = None
         self.card_renderer: CardRenderer | None = None
         self.sounds = SoundManager()
+        self.fonts = FontManager()
         self.buttons: list[Button] = []
         self.input_boxes: list[InputBox] = []
         self.hand_targets: list[tuple[pygame.Rect, dict[str, str]]] = []
@@ -163,8 +165,11 @@ class PygameUnoApp:
                 return self.scenes["end"]
         return self.scenes.get(self.mode, self.scenes["menu"])
 
-    def _draw_menu(self) -> None:
-        draw_menu(self)
+    def _draw_main_menu(self) -> None:
+        draw_main_menu(self)
+        
+    def _draw_play_menu(self) -> None:
+        draw_play_menu(self)
 
     def _draw_instructions(self) -> None:
         draw_instructions(self)
@@ -533,10 +538,11 @@ class PygameUnoApp:
             current_y += 8
 
     def _fonts(self) -> tuple[pygame.font.Font, pygame.font.Font, pygame.font.Font]:
-        # Optional asset: add assets/fonts/Inter-Regular.ttf for a custom UI font.
-        font_path = self.assets_root / "fonts" / "Inter-Regular.ttf"
-        path = str(font_path) if font_path.exists() else None
-        return pygame.font.Font(path, 23), pygame.font.Font(path, 17), pygame.font.Font(path, 44)
+        return (
+            self.fonts.get(23),
+            self.fonts.get(17),
+            self.fonts.get(44)
+        )
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
         for button in reversed(self.buttons):

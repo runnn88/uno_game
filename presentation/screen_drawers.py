@@ -4,7 +4,52 @@ from presentation.theme import ACCENT, ACCENT_2, BAD, GOOD, MUTED, PANEL, PANEL_
 from presentation.ui.components.settings_row import SettingsRow
 
 
-def draw_menu(app) -> None:
+def draw_main_menu(app) -> None:
+    assert app.screen is not None
+    app.screen.fill((255, 255, 255)) 
+    
+    if app.card_renderer:
+        card_img = app.card_renderer.assets.load_card_back()
+        if card_img:
+            card_img = pygame.transform.smoothscale(card_img, (97, 139))
+            fan_data = [
+                (500, 140, 35), (539, 105, 24), (582, 75, 8), 
+                (644, 66, -9), (701, 72, -30)
+            ]
+            for x, y, angle in fan_data:
+                rotated = pygame.transform.rotate(card_img, angle)
+                app.screen.blit(rotated, (x, y))
+
+    pygame.draw.ellipse(app.screen, (255, 255, 255), (442, 190, 407, 143))
+
+    title_font = app.fonts.get(160)
+    btn_font = app.fonts.get(28)
+
+    uno_text = title_font.render("UNO", True, (237, 92, 115))
+    app.screen.blit(pygame.transform.rotate(uno_text, 10), (471, 157))
+
+    app.buttons.clear()
+    buttons_data = [
+        ("Play", 552, 360, "play_menu", (253, 238, 103), (253, 247, 195)),
+        ("Instruction", 552, 456, "instruction", (253, 133, 130), (255, 200, 199)),
+        ("Settings", 552, 552, "settings", (253, 238, 103), (253, 247, 195))
+    ]
+    
+    mouse = pygame.mouse.get_pos()
+    for label, x, y, action, bg_color, border_color in buttons_data:
+        rect = pygame.Rect(x, y, 176, 62)
+        app._add_button(x, y, 176, 62, label, action) 
+        
+        is_hover = rect.collidepoint(mouse)
+        draw_rect = rect.inflate(4, 4) if is_hover else rect
+        
+        pygame.draw.rect(app.screen, border_color, draw_rect.inflate(12, 12), border_radius=20)
+        pygame.draw.rect(app.screen, bg_color, draw_rect, border_radius=20)
+        
+        text_surf = btn_font.render(label, True, (255, 255, 255))
+        app.screen.blit(text_surf, text_surf.get_rect(center=draw_rect.center))
+        
+def draw_play_menu(app) -> None:
     assert app.screen is not None
     app.buttons.clear()
     app.input_boxes.clear()
