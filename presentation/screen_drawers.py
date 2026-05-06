@@ -54,7 +54,7 @@ def draw_menu(app) -> None:
     app._draw_panel(menu, PANEL)
 
     app._draw_text("Fast local play", 116, 170, TEXT, size="big")
-    app._draw_text("or relay-hosted rooms", 118, 218, MUTED)
+    app._draw_text("or code-based online rooms", 118, 218, MUTED)
     app._draw_chip("Hotseat", 118, 274, ACCENT_2)
     app._draw_chip("Bots", 230, 274, GOOD)
     app._draw_chip("Room Code", 315, 274, ACCENT)
@@ -96,7 +96,7 @@ def draw_choose_mode(app) -> None:
     app._draw_text("Match color or rank, stack draw cards, and use special 0/7/8 rules.", 118, 560, MUTED, size="small")
 
     app._draw_text("Choose Mode", 602, 168, TEXT, size="big")
-    app._draw_text("Local games start immediately. Relay games need the relay server running.", 604, 214, MUTED)
+    app._draw_text("Local games start immediately. Online games use room codes.", 604, 214, MUTED)
     x = 604
     y = 258
     app._add_button(x, y, 126, 48, "2P Local", "local", 2)
@@ -104,8 +104,8 @@ def draw_choose_mode(app) -> None:
     app._add_button(x + 276, y, 126, 48, "4P Local", "local", 4)
     app._add_button(x, y + 64, 195, 48, "1P + Bot", "local", (2, 1))
     app._add_button(x + 207, y + 64, 195, 48, "1P + 3 Bots", "local", (4, 3))
-    app._add_button(x, y + 146, 402, 50, "Host Relay Room", "host_room")
-    app._add_button(x, y + 208, 402, 50, "Join Relay Code", "join_room")
+    app._add_button(x, y + 146, 402, 50, "Host Online Room", "host_room")
+    app._add_button(x, y + 208, 402, 50, "Join Room Code", "join_room")
     app._add_button(x, y + 286, 195, 48, "Instructions", "instructions")
     app._add_button(x + 207, y + 286, 195, 48, "Settings", "settings")
     app._draw_text("Online play uses a relay room code. Players never connect directly to the host.", 640, 676, MUTED, center=True, size="small")
@@ -217,7 +217,7 @@ def draw_join(app, input_box_cls) -> None:
             ]
     app._draw_title("Host Game" if app.mode == "host_room" else "Join Game")
     app._draw_panel(pygame.Rect(360, 210, 560, 330), PANEL)
-    app._draw_text("Online rooms use only relay room codes. IP addresses stay out of the game UI.", 640, 248, MUTED, center=True, size="small")
+    app._draw_text("Online rooms use room codes. Connection details stay out of the game UI.", 640, 248, MUTED, center=True, size="small")
     font, small, _big = app._fonts()
     for box in app.input_boxes:
         box.draw(app.screen, font, small)
