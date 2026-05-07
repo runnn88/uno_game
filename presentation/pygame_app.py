@@ -776,15 +776,15 @@ class PygameUnoApp:
             },
             {
                 "name_rect": pygame.Rect(78, 334, 220, 34),
-                "stack_anchor": (110, 198),
+                "stack_anchor": (110, 220),
             },
             {
-                "name_rect": pygame.Rect(528, 114, 224, 34),
-                "stack_anchor": (640, 148),
+                "name_rect": pygame.Rect(528, 208, 224, 34),
+                "stack_anchor": (640, 100),
             },
             {
                 "name_rect": pygame.Rect(982, 334, 220, 34),
-                "stack_anchor": (1114, 198),
+                "stack_anchor": (1014, 220),
             },
         ]
 
@@ -820,10 +820,10 @@ class PygameUnoApp:
         visible_cards = max(1, min(6, card_count))
         start_x = center_x - (small_w // 2)
         for index in range(visible_cards):
-            rect = pygame.Rect(start_x + index * 4, top_y + index * 2, small_w, small_h)
+            rect = pygame.Rect(start_x + index * 4, top_y - index * 2, small_w, small_h)
             self._draw_card_back(rect)
         if card_count > visible_cards:
-            self._draw_chip(f"+{card_count - visible_cards}", center_x - 36, top_y + small_h + 16, MUTED, width=72)
+            self._draw_chip(f"+{card_count - visible_cards}", center_x + 70, top_y + small_h - 110, MUTED, width=72)
 
     def _draw_center_pile(self, top_card: dict[str, str] | None, active_color: str | None, pending_draw: int) -> None:
         assert self.screen is not None
@@ -1003,7 +1003,26 @@ class PygameUnoApp:
         responders = set(reaction.get("responders", []))
         players = state.get("players", [])
         source_name = self._player_name(players, source)
-        if True:
+        if isinstance(self.session, LocalGameSession):
+            x = 1028
+            y = 148
+            self._draw_text(f"{source_name} played an 8!", x, y - 52, TEXT, size="small")
+            self._draw_text("React fast", x, y - 28, TEXT)
+            y += 8
+            for player in players:
+                player_id = player.get("id")
+                done = player_id in responders
+                rect = pygame.Rect(x, y, 190, 38)
+                self._draw_cute_button(
+                    rect,
+                    f"{player.get('name')}",
+                    (190, 224, 255) if not done else (218, 226, 230),
+                    (120, 185, 245) if not done else (176, 188, 196),
+                    font_size=22,
+                )
+                self._add_button(rect.x, rect.y, rect.width, rect.height, f"{player.get('name')}", "react_player", player_id, enabled=not done)
+                y += 55
+        else:
             me = self.session.player_id if self.session else None
 
             already_reacted = me in responders
@@ -1926,6 +1945,11 @@ class PygameUnoApp:
         scene = self.scenes.get(mode)
         if scene is not None:
             scene.enter()
+            
+        if mode == "game":
+            self.sounds.stop_music()
+        else:
+            self.sounds.play_music("menu_bgm")
 
     def _return_home_with_notice(self, message: str) -> None:
         self._go_menu()

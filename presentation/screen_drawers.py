@@ -440,15 +440,15 @@ def draw_instructions(app) -> None:
     highlight_font = app.fonts.get("Sansita-BoldItalic", 22)
     highlight_color = (113, 102, 224)
 
-    app._draw_panel(pygame.Rect(73, 150, 554, 532), PANEL)
-    app._draw_panel(pygame.Rect(652, 150, 554, 532), PANEL)
+    app._draw_panel(pygame.Rect(73, 135, 554, 552), PANEL)
+    app._draw_panel(pygame.Rect(652, 135, 554, 552), PANEL)
     
     normal_font = app.fonts.get("Sansita-Bold", 22)
     highlight_font = app.fonts.get("Sansita-BoldItalic", 22)
     highlight_color = (113, 102, 224)
 
-    app._draw_chip("Flow", 93, 170, ACCENT_2, 98, 33)
-    app._draw_text("HOW TO PLAY", 254, 170, TEXT, size="big")
+    app._draw_chip("Flow", 93, 155, ACCENT_2, 98, 33)
+    app._draw_text("HOW TO PLAY", 254, 155, TEXT, size="big")
     rules = [
         "- Match the discard pile by *color or rank*. *Wild cards* can be played on any color.",
         "- Click a playable card to *choose it*, then press *Play* or *P*. Dimmed cards are not legal.",
@@ -461,14 +461,14 @@ def draw_instructions(app) -> None:
     draw_rich_text_wrapped(
         surface=app.screen,
         text_array=rules,
-        x=93, y=228, max_width=510,
+        x=93, y=200, max_width=510,
         normal_font=normal_font, highlight_font=highlight_font,
         normal_color=TEXT, highlight_color=highlight_color,
         line_height=30
     )
 
-    app._draw_chip("Cards", 668, 170, ACCENT_2, 98, 33)
-    app._draw_text("CARD MEANINGS", 803, 170, TEXT, size="big")
+    app._draw_chip("Cards", 668, 155, ACCENT_2, 98, 33)
+    app._draw_text("CARD MEANINGS", 803, 155, TEXT, size="big")
     cards = [
         "- *0:* choose clockwise or counter-clockwise, then all players *pass hands* in that direction.",
         "- *7:* choose another player and *swap hands* with them.",
@@ -482,7 +482,7 @@ def draw_instructions(app) -> None:
     draw_rich_text_wrapped(
         surface=app.screen,
         text_array=cards,
-        x=668, y=228, max_width=510,
+        x=668, y=200, max_width=510,
         normal_font=normal_font, highlight_font=highlight_font,
         normal_color=TEXT, highlight_color=highlight_color,
         line_height=30
