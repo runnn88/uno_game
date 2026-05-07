@@ -206,11 +206,20 @@ class PygameUnoApp:
         bg_color: tuple[int, int, int],
         border_color: tuple[int, int, int],
         font_size: int = 26,
+        enabled: bool = True,
     ) -> None:
         assert self.screen is not None
 
         mouse = pygame.mouse.get_pos()
-        is_hover = rect.collidepoint(mouse)
+        is_hover = enabled and rect.collidepoint(mouse)
+        if not enabled:
+            bg_color = (220, 224, 226)
+            border_color = (170, 178, 184)
+            text_color = (112, 124, 132)
+            outline_color = (245, 247, 248)
+        else:
+            text_color = (255, 255, 255)
+            outline_color = (0, 0, 0)
 
         draw_rect = rect.inflate(4, 4) if is_hover else rect
 
@@ -248,13 +257,13 @@ class PygameUnoApp:
         text = font.render(
             label,
             True,
-            (255, 255, 255),
+            text_color,
         )
 
         outline = font.render(
             label,
             True,
-            (0, 0, 0),
+            outline_color,
         )
 
         text_rect = text.get_rect(
@@ -500,6 +509,7 @@ class PygameUnoApp:
                 "Start",
                 (120, 200, 255) if can_start else (180, 220, 255),
                 (80, 160, 255) if can_start else (140, 200, 255),
+                enabled=can_start,
             )
             
             self._add_button(
@@ -554,11 +564,13 @@ class PygameUnoApp:
             else:
                 draw_label = "Draw Penalty" if state.get("pending_draw", 0) else "Draw"
                 action_rect = pygame.Rect(1070, 612, 150, 44)
+                can_draw = current == me
                 self._draw_cute_button(
                     action_rect,
                     draw_label,
                     (255, 180, 150),
                     (255, 130, 100),
+                    enabled=can_draw,
                 )
                 self._add_button(
                     action_rect.x,
@@ -567,7 +579,7 @@ class PygameUnoApp:
                     action_rect.height,
                     draw_label,
                     "draw",
-                    enabled=current == me
+                    enabled=can_draw
                 )
             protected = set(state.get("uno_protected_player_ids", ()))
             if my_player and int(my_player.get("card_count", 0)) == 1:
@@ -577,6 +589,7 @@ class PygameUnoApp:
                     "Call UNO",
                     (255, 200, 170) if me not in protected else (255, 150, 120),
                     (255, 150, 120) if me not in protected else (255, 100, 80),
+                    enabled=me not in protected,
                 )
                 self._add_button(
                     action_rect.x,
@@ -618,6 +631,7 @@ class PygameUnoApp:
                 replay_label,
                 (120, 200, 255) if can_replay else (180, 220, 255),
                 (80, 160, 255) if can_replay else (140, 200, 255),
+                enabled=can_replay,
             )
             self._add_button(
                 replay_rect.x,
@@ -1542,11 +1556,12 @@ class PygameUnoApp:
         elif action == "connect":
             self._connect_from_form()
         elif action == "start" and self.session:
+            self._clear_game_button_state()
             self.session.start_game()
             self.sounds.play("card_play")
         elif action == "replay" and self.session:
             self.game_escape_overlay = None
-            self.card_motions.clear()
+            self._clear_game_button_state()
             self.session.start_game()
             self.sounds.play("card_play")
         elif action == "draw" and self.session:
@@ -1693,6 +1708,7 @@ class PygameUnoApp:
 
     def _start_bot_room(self, bot_count: int = 1) -> None:
         self._close_session()
+        self._clear_game_button_state()
         bot_count = max(1, min(3, bot_count))
         self.session = LocalGameSession(player_count=bot_count + 1, bot_count=bot_count)
         self.game_escape_overlay = None
@@ -1765,6 +1781,7 @@ class PygameUnoApp:
         self.connecting = False
         if ok and session is not None:
             self._close_session()
+            self._clear_game_button_state()
             self.session = session
             self.notice = ""
             self.game_escape_overlay = None
@@ -1834,10 +1851,7 @@ class PygameUnoApp:
     def _go_menu(self) -> None:
         self._close_session()
         self.input_boxes.clear()
-        self.selected_card = None
-        self.pending_card = None
-        self.pending_color = None
-        self.pending_pass_direction = None
+        self._clear_game_button_state()
         self.game_escape_overlay = None
         self.host_settings_open = False
         self.connecting = False
@@ -1846,6 +1860,15 @@ class PygameUnoApp:
         self._last_room_notice_sequence = 0
         self.notice_overlay = None
         self._set_mode("menu")
+
+    def _clear_game_button_state(self) -> None:
+        self.selected_card = None
+        self.pending_card = None
+        self.pending_color = None
+        self.pending_pass_direction = None
+        self.hand_targets.clear()
+        self.buttons.clear()
+        self.card_motions.clear()
 
     def _close_session(self) -> None:
         if self.session is not None:
