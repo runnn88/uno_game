@@ -44,7 +44,7 @@ class PresentationTests(unittest.TestCase):
         from presentation.pygame_app import PygameUnoApp
 
         app = PygameUnoApp()
-        app._start_local(2, 0)
+        app._start_bot_room(1)
         app.feedback.observe()
         self.assertTrue(app.card_motions)
 
@@ -170,7 +170,7 @@ class PresentationTests(unittest.TestCase):
         from presentation.rendering.card_renderer import CardRenderer
 
         class FakeSession:
-            info = "Local hotseat"
+            info = "Bot room"
             error = None
 
             @property
@@ -220,13 +220,37 @@ class PresentationTests(unittest.TestCase):
         from presentation.pygame_app import PygameUnoApp
 
         app = PygameUnoApp()
-        app._start_local(2, 0)
+        app._start_bot_room(1)
         assert app.session is not None
         app.session.state.phase = GamePhase.ENDED
         app.session.state.winner_id = "p1"
         app._handle_action("replay", None)
         self.assertEqual(app.mode, "game")
         self.assertEqual(app.session.snapshot()["phase"], "playing")
+
+    def test_pure_local_hotseat_mode_is_removed(self) -> None:
+        from presentation.pygame_app import PygameUnoApp
+
+        app = PygameUnoApp()
+        with self.assertRaises(ValueError):
+            app._start_local(2, 0)
+
+    def test_choose_mode_exposes_one_two_and_three_bot_rooms(self) -> None:
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        import pygame
+
+        from presentation.pygame_app import PygameUnoApp
+        from presentation.rendering.card_renderer import CardRenderer
+
+        pygame.init()
+        pygame.display.set_mode((1, 1))
+        app = PygameUnoApp()
+        app.screen = pygame.Surface((1280, 720))
+        app.card_renderer = CardRenderer()
+        app._draw_choose_mode()
+        bot_payloads = sorted(button.payload for button in app.buttons if button.action == "bot_room")
+        self.assertEqual(bot_payloads, [1, 2, 3])
+        pygame.quit()
 
     def test_missing_relay_connect_does_not_block_ui_flow(self) -> None:
         import pygame

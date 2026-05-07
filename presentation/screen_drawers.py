@@ -182,11 +182,10 @@ def draw_play_menu(app) -> None:
     app._draw_panel(hero, (251, 248, 236))
     app._draw_panel(menu, PANEL)
 
-    app._draw_text("Fast local play", 116, 170, TEXT, size="big")
+    app._draw_text("Bot practice", 116, 170, TEXT, size="big")
     app._draw_text("or code-based online rooms", 118, 218, MUTED)
-    app._draw_chip("Hotseat", 118, 274, ACCENT_2)
-    app._draw_chip("Bots", 230, 274, GOOD)
-    app._draw_chip("Room Code", 315, 274, ACCENT)
+    app._draw_chip("Bots", 118, 274, GOOD)
+    app._draw_chip("Room Code", 208, 274, ACCENT)
     app._draw_menu_cards()
     app._draw_text("Match color or rank, stack draw cards, and use special 0/7/8 rules.", 118, 560, MUTED, size="small")
 
@@ -299,7 +298,7 @@ def draw_choose_mode(app) -> None:
     subtitle_font = pygame.font.Font("assets/fonts/SansitaOne.ttf", 25)
 
     subtitle = subtitle_font.render(
-        "Local games start immediately. Online games use room codes.",
+        "Bot rooms start immediately. Online games use room codes.",
         True,
         (120, 120, 120),
     )
@@ -315,7 +314,7 @@ def draw_choose_mode(app) -> None:
     buttons_data = []
 
     button_w = 170
-    button_h = 50
+    button_h = 52
     spacing = 20
 
     start_x = panel_x + (panel_width - (button_w * 3 + spacing * 2)) // 2
@@ -323,24 +322,13 @@ def draw_choose_mode(app) -> None:
 
     # Row 1
     buttons_data.extend([
-        ("2P Local", start_x, y, 170, 50, "local", 2, (253, 238, 103), (253, 247, 195)),
-        ("3P Local", start_x + button_w + spacing, y, 170, 50, "local", 3, (253, 133, 130), (255, 200, 199)),
-        ("4P Local", start_x + (button_w + spacing) * 2, y, 170, 50, "local", 4, (253, 238, 103), (253, 247, 195)),
+        ("1 Bot", start_x, y, button_w, button_h, "bot_room", 1, (253, 133, 130), (255, 200, 199)),
+        ("2 Bots", start_x + button_w + spacing, y, button_w, button_h, "bot_room", 2, (253, 238, 103), (253, 247, 195)),
+        ("3 Bots", start_x + (button_w + spacing) * 2, y, button_w, button_h, "bot_room", 3, (253, 133, 130), (255, 200, 199)),
     ])
 
     # Row 2
-    y += 74
-
-    wide_w = 260
-    row2_x = panel_x + (panel_width - (wide_w * 2 + spacing)) // 2
-
-    buttons_data.extend([
-        ("1P + Bot", row2_x, y, wide_w, 50, "local", (2, 1), (253, 133, 130), (255, 200, 199)),
-        ("1P + 3 Bots", row2_x + wide_w + spacing, y, wide_w, 50, "local", (4, 3), (253, 238, 103), (253, 247, 195)),
-    ])
-
-    # Row 3
-    y += 74
+    y += 84
 
     center_w = 420
     center_x = panel_x + (panel_width - center_w) // 2
@@ -349,7 +337,7 @@ def draw_choose_mode(app) -> None:
         ("Host Online Room", center_x, y, center_w, 54, "host_room", None, (253, 133, 130), (255, 200, 199))
     )
 
-    # Row 4
+    # Row 3
     y += 78
 
     buttons_data.append(

@@ -647,7 +647,7 @@ class PygameUnoApp:
             )
 
         self._draw_prompt(state)
-        if self.session.info != "Local hotseat":
+        if isinstance(self.session, OnlineGameSession):
             if self.session and self.session.can_start_game and phase in {"menu", "lobby", "playing"}:
                 action_rect = pygame.Rect(1075, 18, 154, 36)
                 self._draw_cute_button(
@@ -1347,7 +1347,7 @@ class PygameUnoApp:
 
     def _draw_pause_overlay(self) -> None:
         self._draw_overlay("Game Room")
-        self._draw_text("Paused locally. The room is still running.", 640, 374, MUTED, center=True, size="small")
+        self._draw_text("Paused. The room is still running.", 640, 374, MUTED, center=True, size="small")
         resume_rect = pygame.Rect(430, 414, 130, 44)
         settings_rect = pygame.Rect(575, 414, 130, 44)
         leave_rect = pygame.Rect(720, 414, 130, 44)
@@ -1496,11 +1496,8 @@ class PygameUnoApp:
             self.game_escape_overlay = "leave_confirm"
         elif action == "game_leave_confirm":
             self._go_menu()
-        elif action == "local":
-            if isinstance(payload, tuple):
-                self._start_local(int(payload[0]), int(payload[1]))
-            else:
-                self._start_local(int(payload or 2), 0)
+        elif action == "bot_room":
+            self._start_bot_room(int(payload or 1))
         elif action == "choose_mode":
             self._set_mode("choose_mode")
             self.notice = ""
@@ -1694,13 +1691,19 @@ class PygameUnoApp:
                 return player
         return None
 
-    def _start_local(self, player_count: int = 2, bot_count: int = 0) -> None:
+    def _start_bot_room(self, bot_count: int = 1) -> None:
         self._close_session()
-        self.session = LocalGameSession(player_count=player_count, bot_count=bot_count)
+        bot_count = max(1, min(3, bot_count))
+        self.session = LocalGameSession(player_count=bot_count + 1, bot_count=bot_count)
         self.game_escape_overlay = None
         self._last_room_notice_sequence = 0
         self._set_mode("game")
         self.notice = ""
+
+    def _start_local(self, player_count: int = 2, bot_count: int = 0) -> None:
+        if bot_count <= 0:
+            raise ValueError("Pure local hotseat mode has been removed. Choose a bot room or online multiplayer.")
+        self._start_bot_room(bot_count)
 
     def _connect_from_form(self) -> None:
         if self.connecting:

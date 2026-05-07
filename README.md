@@ -30,7 +30,7 @@ To host an online room, choose **Host Online Room** in the game. The relay creat
 
 To join an online room, choose **Join Room Code** in the game and paste the room code. The game connects to the configured fixed relay server automatically.
 
-Local hotseat, bot games, online hosting, online joining, settings, and instructions are all handled inside the pygame UI.
+Bot rooms, online hosting, online joining, settings, and instructions are all handled inside the pygame UI. Pure local hotseat mode has been removed.
 
 ## Game Rules
 
@@ -122,8 +122,8 @@ The pygame app delegates lifecycle work to scene classes:
 - Online room ownership: only the room owner can start the game.
 - Late joins and full rooms are rejected by the server.
 - Disconnected players are skipped; the last connected player wins.
-- Local hotseat supports 2, 3, or 4 players.
-- Bot modes are available from the main menu.
+- Bot rooms are available from the main menu.
+- Multiplayer is handled through hosted or joined online rooms.
 - Illegal cards are dimmed in the hand before the player clicks them.
 - Smooth UI feedback, fast transitions, and animated card movement.
 - Optional sounds load from `assets/sounds`; missing sounds are safe no-ops.
