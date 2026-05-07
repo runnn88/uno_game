@@ -23,7 +23,12 @@ from systems.setup.game_initializer import GameInitializer
 class LocalGameSession:
     def __init__(self, player_count: int = 2, bot_count: int = 0) -> None:
         human_count = max(1, player_count - bot_count)
-        players = [Player(f"p{i + 1}", f"Player {i + 1}") for i in range(human_count)]
+        players = [Player("p1", "Player 1")]
+
+        self._local_player_id = "p1"
+
+        for i in range(1, human_count):
+            players.append(Player(f"p{i + 1}", f"Player {i + 1}"))
         for index in range(bot_count):
             bot_id = len(players) + 1
             players.append(Player(f"p{bot_id}", f"Bot {index + 1}", is_bot=True))
@@ -40,7 +45,7 @@ class LocalGameSession:
 
     @property
     def player_id(self) -> str | None:
-        return self.state.current_player.id if self.state.current_player else None
+        return self._local_player_id
 
     @property
     def can_start_game(self) -> bool:

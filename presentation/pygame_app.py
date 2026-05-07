@@ -513,11 +513,36 @@ class PygameUnoApp:
         elif phase == "playing":
             is_my_turn = current == me
             has_penalty = state.get("pending_draw", 0) > 0
+            selected = self.selected_card if is_my_turn else None
+
+            # =========================================
+            # PLAY / UNO BUTTON
+            # =========================================
+            if selected is not None:
+                will_have_uno = my_player is not None and int(my_player.get("card_count", 0)) == 2
+                action_label = "UNO" if will_have_uno else "Play"
+                action_rect = pygame.Rect(1070, 612, 150, 44)
+                self._draw_cute_button(
+                    action_rect,
+                    action_label,
+                    (190, 224, 255),
+                    (120, 185, 245),
+                    enabled=True,
+                )
+                self._add_button(
+                    action_rect.x,
+                    action_rect.y,
+                    action_rect.width,
+                    action_rect.height,
+                    action_label,
+                    "play_selected",
+                    enabled=True
+                )
 
             # =========================================
             # PASS BUTTON
             # =========================================
-            if state.get("drew_this_turn") and is_my_turn:
+            elif state.get("drew_this_turn") and is_my_turn:
 
                 action_rect = pygame.Rect(1070, 612, 150, 44)
 
@@ -978,25 +1003,7 @@ class PygameUnoApp:
         responders = set(reaction.get("responders", []))
         players = state.get("players", [])
         source_name = self._player_name(players, source)
-        if isinstance(self.session, LocalGameSession):
-            x = 1028
-            y = 148
-            self._draw_text(f"{source_name} played an 8!", x, y - 52, TEXT, size="small")
-            self._draw_text("React fast", x, y - 28, TEXT)
-            for player in players:
-                player_id = player.get("id")
-                done = player_id in responders
-                rect = pygame.Rect(x, y, 190, 38)
-                self._draw_cute_button(
-                    rect,
-                    f"{player.get('name')}",
-                    (190, 224, 255) if not done else (218, 226, 230),
-                    (120, 185, 245) if not done else (176, 188, 196),
-                    font_size=22,
-                )
-                self._add_button(rect.x, rect.y, rect.width, rect.height, f"{player.get('name')}", "react_player", player_id, enabled=not done)
-                y += 46
-        else:
+        if True:
             me = self.session.player_id if self.session else None
 
             already_reacted = me in responders
@@ -1905,6 +1912,7 @@ class PygameUnoApp:
         self.hand_targets.clear()
         self.buttons.clear()
         self.card_motions.clear()
+        self._last_game_state = None
 
     def _close_session(self) -> None:
         if self.session is not None:

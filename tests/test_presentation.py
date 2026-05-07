@@ -124,6 +124,49 @@ class PresentationTests(unittest.TestCase):
         self.assertTrue(any(button.action == "react" for button in app.buttons))
         pygame.quit()
 
+    def test_bot_room_reaction_uses_single_react_button(self) -> None:
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        import pygame
+
+        from presentation.game_sessions import LocalGameSession
+        from presentation.pygame_app import PygameUnoApp
+        from presentation.rendering.card_renderer import CardRenderer
+
+        class FakeBotSession(LocalGameSession):
+            info = "Bot room"
+            error = None
+
+            @property
+            def player_id(self):
+                return "p1"
+
+            def snapshot(self):
+                return {
+                    "phase": "reaction",
+                    "current_player_id": "p1",
+                    "top_card": {"id": "red_8_0", "color": "red", "rank": "8"},
+                    "active_color": "red",
+                    "direction": "CLOCKWISE",
+                    "pending_draw": 0,
+                    "reaction": {"active": True, "source_player_id": "p2", "responders": []},
+                    "players": [
+                        {"id": "p1", "name": "Player", "card_count": 3, "hand": []},
+                        {"id": "p2", "name": "Bot 1", "card_count": 3, "hand": []},
+                    ],
+                }
+
+        pygame.init()
+        pygame.display.set_mode((1, 1))
+        app = PygameUnoApp()
+        app.screen = pygame.Surface((1280, 720))
+        app.card_renderer = CardRenderer()
+        app.mode = "game"
+        app.session = object.__new__(FakeBotSession)
+        app._draw_game()
+        self.assertEqual([button.action for button in app.buttons if button.action == "react"], ["react"])
+        self.assertFalse(any(button.action == "react_player" for button in app.buttons))
+        pygame.quit()
+
     def test_card_click_selects_then_play_shortcut_sends_card_and_uno(self) -> None:
         from presentation.pygame_app import PygameUnoApp
 
@@ -179,12 +222,42 @@ class PresentationTests(unittest.TestCase):
         app.pending_pass_direction = "clockwise"
         app.hand_targets = [(object(), {})]
         app.buttons = [object()]
+        app._last_game_state = {"phase": "playing"}
         app._handle_action("start", None)
         self.assertTrue(app.session.started)
         self.assertIsNone(app.selected_card)
         self.assertIsNone(app.pending_card)
         self.assertEqual(app.hand_targets, [])
         self.assertEqual(app.buttons, [])
+        self.assertIsNone(app._last_game_state)
+
+    def test_start_game_feedback_baseline_reset_allows_initial_deal_animation(self) -> None:
+        from presentation.pygame_app import PygameUnoApp
+
+        class FakeSession:
+            def start_game(self):
+                pass
+
+            @property
+            def player_id(self):
+                return "p1"
+
+            def snapshot(self):
+                return {
+                    "phase": "playing",
+                    "players": [
+                        {"id": "p1", "card_count": 7},
+                        {"id": "p2", "card_count": 7},
+                    ],
+                }
+
+        app = PygameUnoApp()
+        app.mode = "game"
+        app.session = FakeSession()
+        app._last_game_state = {"phase": "playing", "players": []}
+        app._handle_action("start", None)
+        app.feedback.observe()
+        self.assertTrue(app.card_motions)
 
     def test_selected_second_last_card_changes_primary_button_to_uno(self) -> None:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
