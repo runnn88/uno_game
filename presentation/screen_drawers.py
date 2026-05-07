@@ -309,7 +309,7 @@ def draw_choose_mode(app) -> None:
 
     # ===== BUTTON LAYOUT =====
 
-    btn_font = app.fonts.get(28)
+    btn_font = app.fonts.get("SansitaOne", 28)
     mouse = pygame.mouse.get_pos()
 
     buttons_data = []
@@ -677,7 +677,7 @@ def draw_join(app, input_box_cls) -> None:
         box.draw(app.screen, font, small)
 
     # ===== BUTTONS =====
-    btn_font = app.fonts.get(28)
+    btn_font = app.fonts.get("SansitaOne", 28)
 
     connect_label = (
         "Connecting..."
