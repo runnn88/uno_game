@@ -58,7 +58,7 @@ class GameFeedback:
             self.animate_cards(self._deck_anchor(), self._player_anchor(state, player.get("id")), min(4, int(player.get("card_count", 0))), face_down=True)
 
     def _animate_phase_changes(self, previous: dict[str, Any], state: dict[str, Any]) -> None:
-        if previous.get("phase") != "playing" and state.get("phase") == "playing":
+        if previous.get("phase") in {"menu", "lobby", "ended"} and state.get("phase") == "playing":
             self._animate_initial_deal(state)
 
     def _animate_top_card_change(self, previous: dict[str, Any], state: dict[str, Any]) -> None:
@@ -70,7 +70,7 @@ class GameFeedback:
         self.host.card_motions.append(CardMotion(self._player_anchor(previous, actor_id), self._discard_anchor(), new_top))
 
     def _animate_count_changes(self, previous: dict[str, Any], state: dict[str, Any]) -> None:
-        if previous.get("phase") != "playing" and state.get("phase") == "playing":
+        if previous.get("phase") in {"menu", "lobby", "ended"} and state.get("phase") == "playing":
             return
         previous_players = self._players_by_id(previous)
         for player in state.get("players", []):

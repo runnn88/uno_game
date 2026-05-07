@@ -48,6 +48,49 @@ class PresentationTests(unittest.TestCase):
         app.feedback.observe()
         self.assertTrue(app.card_motions)
 
+    def test_reaction_return_to_playing_does_not_replay_deal_animation(self) -> None:
+        from presentation.pygame_app import PygameUnoApp
+
+        class FakeSession:
+            @property
+            def player_id(self):
+                return "p1"
+
+            def snapshot(self):
+                return {}
+
+        previous = {
+            "phase": "reaction",
+            "current_player_id": "p2",
+            "top_card": {"id": "red_8_0", "color": "red", "rank": "8"},
+            "players": [{"id": "p1", "card_count": 3}, {"id": "p2", "card_count": 3}],
+        }
+        current = {
+            "phase": "playing",
+            "current_player_id": "p2",
+            "top_card": {"id": "red_8_0", "color": "red", "rank": "8"},
+            "players": [{"id": "p1", "card_count": 3}, {"id": "p2", "card_count": 3}],
+        }
+        app = PygameUnoApp()
+        app.mode = "game"
+        app.session = FakeSession()
+        app.feedback._animate_phase_changes(previous, current)
+        app.feedback._animate_count_changes(previous, current)
+        self.assertEqual(app.card_motions, [])
+
+    def test_replay_from_ended_local_game_restarts_in_room(self) -> None:
+        from config.enums import GamePhase
+        from presentation.pygame_app import PygameUnoApp
+
+        app = PygameUnoApp()
+        app._start_local(2, 0)
+        assert app.session is not None
+        app.session.state.phase = GamePhase.ENDED
+        app.session.state.winner_id = "p1"
+        app._handle_action("replay", None)
+        self.assertEqual(app.mode, "game")
+        self.assertEqual(app.session.snapshot()["phase"], "playing")
+
     def test_missing_relay_connect_does_not_block_ui_flow(self) -> None:
         import pygame
 
@@ -69,12 +112,12 @@ class PresentationTests(unittest.TestCase):
             start = time.monotonic()
             app._connect_from_form()
             self.assertLess(time.monotonic() - start, 0.1)
-            self.assertTrue(app.connecting)
-            time.sleep(0.25)
-            app._finish_pending_connection()
+        self.assertTrue(app.connecting)
+        time.sleep(0.25)
+        app._finish_pending_connection()
         self.assertFalse(app.connecting)
-        self.assertEqual(app.mode, "menu")
-        self.assertIn("not responding", app.notice.lower())
+        self.assertEqual(app.mode, "join_room")
+        self.assertTrue("not responding" in app.notice.lower() or "unavailable" in app.notice.lower())
 
     def test_nonexistent_room_returns_home_instead_of_game_screen(self) -> None:
         import pygame
@@ -105,7 +148,7 @@ class PresentationTests(unittest.TestCase):
                 time.sleep(0.02)
             app._finish_pending_connection()
             self.assertFalse(app.connecting)
-            self.assertEqual(app.mode, "menu")
+            self.assertEqual(app.mode, "join_room")
             self.assertIsNone(app.session)
             self.assertIn("room does not exist", app.notice)
         finally:

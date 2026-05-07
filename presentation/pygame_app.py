@@ -245,7 +245,10 @@ class PygameUnoApp:
         if phase == "ended":
             winner = self._player_name(players, state.get("winner_id"))
             self._draw_overlay(f"{winner} wins")
-            self._add_button(530, 410, 220, 46, "Back To Menu", "menu")
+            can_replay = bool(self.session and self.session.can_start_game)
+            replay_label = "Replay" if can_replay else "Waiting For Host"
+            self._add_button(425, 410, 200, 46, replay_label, "replay", enabled=can_replay)
+            self._add_button(655, 410, 200, 46, "Back To Menu", "menu")
 
         self._draw_prompt(state)
         if self.session and self.session.can_start_game and phase in {"menu", "lobby", "playing"}:
@@ -699,6 +702,11 @@ class PygameUnoApp:
         elif action == "start" and self.session:
             self.session.start_game()
             self.sounds.play("card_play")
+        elif action == "replay" and self.session:
+            self.game_escape_overlay = None
+            self.card_motions.clear()
+            self.session.start_game()
+            self.sounds.play("card_play")
         elif action == "draw" and self.session:
             self.session.draw_card()
             self.sounds.play("card_draw")
@@ -865,7 +873,7 @@ class PygameUnoApp:
             return
         title = "Could not create room" if self.mode == "host_room" else "Could not join room"
         self.feedback.push_toast(title, message, BAD, duration=5.0)
-        self._return_home_with_notice(message)
+        self.notice = message
 
     def _connection_error_message(self, exc: Exception) -> str:
         raw = str(exc).strip()
@@ -878,6 +886,8 @@ class PygameUnoApp:
         if "did not assign a player slot" in raw.lower():
             return "The room could not add you. Please try again."
         if "refused" in raw.lower() or "actively refused" in raw.lower():
+            return "Online service is unavailable right now."
+        if "forbidden by its access permissions" in raw.lower():
             return "Online service is unavailable right now."
         if "room code is required" in raw.lower():
             return "Enter a room code to join."
