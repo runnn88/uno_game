@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import threading
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 import pygame
@@ -45,6 +46,7 @@ from presentation.ui.components.chip import Chip
 from presentation.ui.components.input_box import InputBox
 from presentation.ui.components.panel import Panel
 from presentation.ui.components.room_code_panel import RoomCodePanel
+from presentation.ui.components.settings_row import SettingsRow
 
 
 class PygameUnoApp:
@@ -65,6 +67,7 @@ class PygameUnoApp:
         self.pending_card: dict[str, str] | None = None
         self.pending_color: str | None = None
         self.pending_pass_direction: str | None = None
+        self.game_escape_overlay: str | None = None
         self.host_settings_open = False
         self.transition_alpha = 255
         self.click_feedback: list[tuple[tuple[int, int], float]] = []
@@ -79,6 +82,8 @@ class PygameUnoApp:
         self._connection_result: tuple[int, bool, OnlineGameSession | None, str] | None = None
         self._connection_lock = threading.Lock()
         self._last_session_error: str | None = None
+        self._session_error_clear_at = 0.0
+        self._last_room_notice_sequence = 0
         self.assets_root = Path(__file__).resolve().parents[2] / "assets"
         self.scenes = {
             "menu": MenuScene(self),
@@ -115,11 +120,16 @@ class PygameUnoApp:
                 self.running = False
                 continue
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                if self.mode in {"game", "host_room", "join_room", "settings", "instructions", "choose_mode"}:
+                if self.mode == "game":
+                    self._handle_game_escape()
+                elif self.mode in {"host_room", "join_room", "settings", "instructions", "choose_mode"}:
                     self._go_menu()
                 else:
                     self.running = False
                 continue
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_u:
+                if self._handle_uno_shortcut():
+                    continue
 
             try:
                 self._current_scene().handle_event(event)
@@ -139,6 +149,7 @@ class PygameUnoApp:
             self._current_scene().update(dt)
             self._finish_pending_connection()
             self.feedback.observe()
+            self._observe_room_notices()
             self._handle_session_error()
         except Exception as exc:
             self._handle_runtime_error("Update problem", exc)
@@ -520,6 +531,7 @@ class PygameUnoApp:
         my_player = next((player for player in players if player.get("id") == me), None)
         hand = list(my_player.get("hand", [])) if my_player else []
         self._draw_hand(hand, state, can_play=phase == "playing" and current == me)
+        catchable = self._catchable_uno_player(state, me)
 
         if phase in {"menu", "lobby"} or not top_card:
             can_start = bool(self.session and self.session.can_start_game)
@@ -548,80 +560,32 @@ class PygameUnoApp:
                 self._add_button(1070, 612, 150, 44, "Pass", "pass_turn", enabled=True)
             else:
                 draw_label = "Draw Penalty" if state.get("pending_draw", 0) else "Draw"
-                action_rect = pygame.Rect(1030, 612, 190, 58)
-
-                self._draw_cute_button(
-                    action_rect,
-                    draw_label,
-                    (253, 238, 103),
-                    (253, 247, 195),
-                )
-
-                self._add_button(
-                    action_rect.x,
-                    action_rect.y,
-                    action_rect.width,
-                    action_rect.height,
-                    "",
-                    "draw",
-                    enabled=current == me,
-                )
-                # self._add_button(1070, 612, 150, 44, draw_label, "draw", enabled=current == me)
+                self._add_button(1070, 612, 150, 44, draw_label, "draw", enabled=current == me)
+            protected = set(state.get("uno_protected_player_ids", ()))
             if my_player and int(my_player.get("card_count", 0)) == 1:
-                uno_rect = pygame.Rect(1015, 520, 210, 58)
-
-                self._draw_cute_button(
-                    uno_rect,
-                    "CALL UNO",
-                    (253, 133, 130),
-                    (255, 200, 199),
-                )
-
-                self._add_button(
-                    uno_rect.x,
-                    uno_rect.y,
-                    uno_rect.width,
-                    uno_rect.height,
-                    "",
-                    "call_uno",
-                )
-                # self._add_button(1055, 520, 174, 44, "Call UNO", "call_uno", enabled=True)
+                self._add_button(1055, 520, 174, 44, "Call UNO", "call_uno", enabled=me not in protected)
+            if catchable:
+                self._add_button(1055, 468, 174, 44, "Catch UNO", "catch_uno", catchable.get("id"), enabled=True)
 
         if phase == "ended":
             winner = self._player_name(players, state.get("winner_id"))
             self._draw_overlay(f"{winner} wins")
-            self._add_button(530, 410, 220, 46, "Back To Menu", "menu")
+            can_replay = bool(self.session and self.session.can_start_game)
+            replay_label = "Replay" if can_replay else "Waiting For Host"
+            self._add_button(425, 410, 200, 46, replay_label, "replay", enabled=can_replay)
+            self._add_button(655, 410, 200, 46, "Back To Menu", "menu")
 
         self._draw_prompt(state)
-        # if self.session and self.session.can_start_game and phase in {"menu", "lobby", "playing"}:
-        #     self._add_button(1055, 122, 154, 36, "Host Settings", "host_settings")
-        # if self.host_settings_open:
-        #     self._draw_host_settings(state)
-
-        # =========================================
-        # MENU BUTTON
-        # =========================================
-        menu_rect = pygame.Rect(18, 14, 138, 48)
-
-        self._draw_cute_button(
-            menu_rect,
-            "Menu",
-            (245, 120, 120),
-            (255, 210, 210),
-            font_size=24,
-        )
-
-        self._add_button(
-            menu_rect.x,
-            menu_rect.y,
-            menu_rect.width,
-            menu_rect.height,
-            "",
-            "menu",
-        )
-        # Draw accumulated buttons (Start/Draw/Pass/Call UNO/React/Menu/...)
-        # self._draw_buttons()
-
+        if self.session and self.session.can_start_game and phase in {"menu", "lobby", "playing"}:
+            self._add_button(1055, 122, 154, 36, "Host Settings", "host_settings")
+        if self.host_settings_open:
+            self._draw_host_settings(state)
+        self._add_button(28, 22, 92, 34, "Menu", "game_pause")
+        if self.game_escape_overlay:
+            self.buttons.clear()
+            self.hand_targets.clear()
+            self._draw_game_escape_overlay()
+        self._draw_buttons()
         error = self.session.error if self.session else None
         if error:
             self._draw_text(error, 640, 690, BAD, center=True)
@@ -1025,7 +989,6 @@ class PygameUnoApp:
 
     def _draw_title(self, title: str) -> None:
         self._draw_text(title, 640, 130, TEXT, center=True, size="big")
-        # self._draw_text("Host-authoritative UNO with local play, bots, and relay room codes", 640, 174, MUTED, center=True)
 
     def _draw_buttons(self) -> None:
         assert self.screen is not None
@@ -1043,11 +1006,12 @@ class PygameUnoApp:
         assert self.screen is not None
         Panel(rect, color, border, radius).draw(self.screen)
 
-    def _draw_chip(self, label: str, x: int, y: int, color: tuple[int, int, int], width: int | None = None) -> None:
+    def _draw_chip(self, label: str, x: int, y: int, color: tuple[int, int, int], width: int | None = None, height: int | None = None) -> None:
         assert self.screen is not None
         _font, small, _big = self._fonts()
         chip_width = width or max(74, small.size(label)[0] + 24)
-        Chip(label, pygame.Rect(x, y, chip_width, 26), color).draw(self.screen, small)
+        chip_height = height or max(74, small.size(label)[0] + 24)
+        Chip(label, pygame.Rect(x, y, chip_width, chip_height), color).draw(self.screen, _font)
 
     def _draw_table_texture(self) -> None:
         assert self.screen is not None
@@ -1101,8 +1065,49 @@ class PygameUnoApp:
         self._draw_text("Lobby", 420, 424, TEXT)
         self._draw_text("Locked" if lobby_locked else "Open", 640, 424, MUTED, center=True)
         self._add_button(710, 410, 96, 38, "Toggle", "host_toggle_lock")
-        self._draw_text("Relay hosting prevents player-to-player IP exposure.", 640, 462, MUTED, center=True, size="small")
+        self._draw_text("These settings apply to this online room.", 640, 462, MUTED, center=True, size="small")
         self._add_button(530, 515, 220, 44, "Close", "host_settings_close")
+
+    def _draw_game_escape_overlay(self) -> None:
+        if self.game_escape_overlay == "settings":
+            self._draw_game_settings_overlay()
+        elif self.game_escape_overlay == "leave_confirm":
+            self._draw_leave_confirm_overlay()
+        else:
+            self._draw_pause_overlay()
+
+    def _draw_pause_overlay(self) -> None:
+        self._draw_overlay("Game Room")
+        self._draw_text("Paused locally. The room is still running.", 640, 374, MUTED, center=True, size="small")
+        self._add_button(430, 414, 130, 44, "Resume", "game_resume")
+        self._add_button(575, 414, 130, 44, "Settings", "game_settings")
+        self._add_button(720, 414, 130, 44, "Leave", "game_leave_request")
+
+    def _draw_game_settings_overlay(self) -> None:
+        self._draw_overlay("Settings")
+        rows = [
+            ("Volume", "volume", f"{int(self.user_settings.volume * 100)}%"),
+            ("Fullscreen", "fullscreen", "On" if self.user_settings.fullscreen else "Off"),
+        ]
+        font, small, _big = self._fonts()
+        y = 360
+        for label, key, value in rows:
+            row_rect = pygame.Rect(430, y - 10, 420, 52)
+            SettingsRow(row_rect, label, value).draw(self.screen, font, small)
+            if key == "volume":
+                self._add_button(750, y, 42, 36, "-", "volume_down")
+                self._add_button(802, y, 42, 36, "+", "volume_up")
+            else:
+                self._add_button(742, y, 102, 36, "Toggle", f"toggle_{key}")
+            y += 58
+        self._add_button(475, 514, 150, 42, "Back", "game_resume")
+        self._add_button(655, 514, 150, 42, "Confirm", "game_settings_confirm")
+
+    def _draw_leave_confirm_overlay(self) -> None:
+        self._draw_overlay("Leave Room?")
+        self._draw_text("You will leave this room and return to the menu.", 640, 374, MUTED, center=True, size="small")
+        self._add_button(470, 414, 150, 44, "Cancel", "game_resume")
+        self._add_button(660, 414, 150, 44, "Leave", "game_leave_confirm")
 
     def _add_button(self, x: int, y: int, w: int, h: int, label: str, action: str, payload: Any = None, enabled: bool = True) -> None:
         self.buttons.append(Button(pygame.Rect(x, y, w, h), label, action, payload, enabled))
@@ -1158,9 +1163,9 @@ class PygameUnoApp:
 
     def _fonts(self) -> tuple[pygame.font.Font, pygame.font.Font, pygame.font.Font]:
         return (
-            self.fonts.get(23),
-            self.fonts.get(17),
-            self.fonts.get(44)
+            self.fonts.get("SansitaOne",24),  #font
+            self.fonts.get("SansitaOne",17),  #small
+            self.fonts.get("SansitaOne", 30)   #big
         )
 
     def _handle_click(self, pos: tuple[int, int]) -> None:
@@ -1186,6 +1191,19 @@ class PygameUnoApp:
 
     def _handle_action(self, action: str, payload: Any) -> None:
         if action == "menu":
+            self._go_menu()
+        elif action == "game_pause":
+            self.game_escape_overlay = "pause"
+        elif action == "game_resume":
+            self.game_escape_overlay = None
+        elif action == "game_settings":
+            self.game_escape_overlay = "settings"
+        elif action == "game_settings_confirm":
+            self._save_settings(show_notice=False)
+            self.game_escape_overlay = None
+        elif action == "game_leave_request":
+            self.game_escape_overlay = "leave_confirm"
+        elif action == "game_leave_confirm":
             self._go_menu()
         elif action == "local":
             if isinstance(payload, tuple):
@@ -1238,6 +1256,11 @@ class PygameUnoApp:
         elif action == "start" and self.session:
             self.session.start_game()
             self.sounds.play("card_play")
+        elif action == "replay" and self.session:
+            self.game_escape_overlay = None
+            self.card_motions.clear()
+            self.session.start_game()
+            self.sounds.play("card_play")
         elif action == "draw" and self.session:
             self.session.draw_card()
             self.sounds.play("card_draw")
@@ -1245,6 +1268,9 @@ class PygameUnoApp:
             self.session.pass_turn()
         elif action == "call_uno" and self.session:
             self.session.call_uno()
+            self.sounds.play("reaction_hit")
+        elif action == "catch_uno" and self.session:
+            self.session.catch_uno(str(payload))
             self.sounds.play("reaction_hit")
         elif action == "react" and self.session:
             self.session.react()
@@ -1281,9 +1307,50 @@ class PygameUnoApp:
         self.pending_color = None
         self.pending_pass_direction = None
 
+    def _handle_game_escape(self) -> None:
+        if self.game_escape_overlay is None:
+            self.game_escape_overlay = "pause"
+        else:
+            self.game_escape_overlay = None
+
+    def _handle_uno_shortcut(self) -> bool:
+        if self.mode != "game" or self.session is None:
+            return False
+        if any(box.active for box in self.input_boxes):
+            return False
+        state = self.session.snapshot()
+        if not state:
+            return False
+        me = self.session.player_id
+        my_player = self._state_player(state, me)
+        protected = set(state.get("uno_protected_player_ids", ()))
+        if my_player and int(my_player.get("card_count", 0)) == 1 and me not in protected:
+            self._safe_handle_action("call_uno", None)
+            return True
+        target = self._catchable_uno_player(state, me)
+        if target:
+            self._safe_handle_action("catch_uno", target.get("id"))
+            return True
+        return True
+
+    def _state_player(self, state: dict[str, Any], player_id: str | None) -> dict[str, Any] | None:
+        return next((player for player in state.get("players", []) if player.get("id") == player_id), None)
+
+    def _catchable_uno_player(self, state: dict[str, Any], viewer_id: str | None) -> dict[str, Any] | None:
+        protected = set(state.get("uno_protected_player_ids", ()))
+        for player in state.get("players", []):
+            player_id = player.get("id")
+            if player_id == viewer_id or not player.get("connected", True):
+                continue
+            if int(player.get("card_count", 0)) == 1 and player_id not in protected:
+                return player
+        return None
+
     def _start_local(self, player_count: int = 2, bot_count: int = 0) -> None:
         self._close_session()
         self.session = LocalGameSession(player_count=player_count, bot_count=bot_count)
+        self.game_escape_overlay = None
+        self._last_room_notice_sequence = 0
         self._set_mode("game")
         self.notice = ""
 
@@ -1295,7 +1362,7 @@ class PygameUnoApp:
         room_code = None if self.mode == "host_room" else self.input_boxes[1].value.strip().upper()
         if self.mode == "join_room" and not room_code:
             self.notice = "Enter a room code before connecting."
-            self.feedback.push_toast("Room code missing", "Ask the host for the room code, then try again.", BAD, duration=3.2)
+            self.feedback.push_toast("Room code needed", "Ask the host for the room code, then try again.", BAD, duration=3.2)
             return
         self._begin_online_connection(name, room_code)
 
@@ -1312,8 +1379,8 @@ class PygameUnoApp:
         self._connection_id += 1
         token = self._connection_id
         self.connecting = True
-        self.notice = "Connecting to relay..."
-        self.feedback.push_toast("Connecting...", "Trying the relay now. The screen will stay responsive.", ACCENT, duration=2.2)
+        self.notice = "Creating room..." if is_host else "Joining room..."
+        self.feedback.push_toast(self.notice, "One moment, please.", ACCENT, duration=2.2)
 
         def worker() -> None:
             try:
@@ -1324,7 +1391,7 @@ class PygameUnoApp:
                     relay_host, relay_port = self._relay_endpoint()
                     target_room_code = room_code
                 session = OnlineGameSession(relay_host, relay_port, name, is_host=is_host, room_code=target_room_code)
-                session.info = "Hosting through relay" if is_host else "Connected through relay"
+                session.info = "Room owner" if is_host else "Online player"
                 result = (token, True, session, "")
             except Exception as exc:
                 result = (token, False, None, self._connection_error_message(exc))
@@ -1349,21 +1416,42 @@ class PygameUnoApp:
             self._close_session()
             self.session = session
             self.notice = ""
+            self.game_escape_overlay = None
+            snapshot = session.snapshot() or {}
+            self._last_room_notice_sequence = int(snapshot.get("room_notice_sequence", 0))
             self._set_mode("game")
-            self.feedback.push_toast("Connected!", "Room code flow is ready. No IP address needed.", GOOD, duration=3.0)
+            if session.is_host:
+                self.feedback.push_toast("Room created", "Share the room code when you are ready.", GOOD, duration=3.4)
+            else:
+                self.feedback.push_toast("Joined room", "You are in. Wait for the host to start.", GOOD, duration=3.4)
             return
-        self.feedback.push_toast("Connection failed", message, BAD, duration=5.0)
-        self._return_home_with_notice(message)
+        title = "Could not create room" if self.mode == "host_room" else "Could not join room"
+        self.feedback.push_toast(title, message, BAD, duration=5.0)
+        self.notice = message
 
     def _connection_error_message(self, exc: Exception) -> str:
         raw = str(exc).strip()
         if isinstance(exc, TimeoutError) or "timed out" in raw.lower():
-            return "The relay did not answer. Check that the relay server is running, then try again."
+            return "Online service is not responding. Please try again in a moment."
+        if "did not confirm the room" in raw.lower():
+            return "Online service is not responding. Please try again in a moment."
+        if "did not return a room code" in raw.lower():
+            return "The room could not be created. Please try again."
+        if "did not assign a player slot" in raw.lower():
+            return "The room could not add you. Please try again."
         if "refused" in raw.lower() or "actively refused" in raw.lower():
-            return "No relay server is running at the configured endpoint."
+            return "Online service is unavailable right now."
+        if "forbidden by its access permissions" in raw.lower():
+            return "Online service is unavailable right now."
         if "room code is required" in raw.lower():
-            return "Room code is required to join a relay room."
-        return raw or "Could not connect to the relay server."
+            return "Enter a room code to join."
+        if "room not found" in raw.lower():
+            return "That room does not exist. Check the code and try again."
+        if raw.lower() == "room is full":
+            return "That room is full."
+        if "name already taken" in raw.lower():
+            return "That name is already in this room."
+        return raw or "Could not connect."
 
     def _copy_room_code(self) -> None:
         if not isinstance(self.session, OnlineGameSession) or not self.session.room_code:
@@ -1398,10 +1486,12 @@ class PygameUnoApp:
         self.pending_card = None
         self.pending_color = None
         self.pending_pass_direction = None
+        self.game_escape_overlay = None
         self.host_settings_open = False
         self.connecting = False
         self._connection_id += 1
         self._last_session_error = None
+        self._last_room_notice_sequence = 0
         self.notice_overlay = None
         self._set_mode("menu")
 
@@ -1421,22 +1511,65 @@ class PygameUnoApp:
         self._go_menu()
         self.notice = message
 
+    def _observe_room_notices(self) -> None:
+        if self.mode != "game" or self.session is None:
+            return
+        state = self.session.snapshot()
+        if not state:
+            return
+        sequence = int(state.get("room_notice_sequence", 0) or 0)
+        if sequence <= self._last_room_notice_sequence:
+            return
+        self._last_room_notice_sequence = sequence
+        message = str(state.get("room_notice") or "").strip()
+        if message:
+            self.feedback.push_toast("Room update", message, MUTED, duration=3.8)
+
     def _handle_session_error(self) -> None:
-        if self.mode != "game" or not isinstance(self.session, OnlineGameSession):
+        if self.mode != "game" or self.session is None:
             return
         error = self.session.error
         if not error:
             self._last_session_error = None
+            self._session_error_clear_at = 0.0
             return
+        is_online = isinstance(self.session, OnlineGameSession)
+        persistent = is_online and (error.strip().lower() == "room is full" or "lost connection" in error.lower())
         if error != self._last_session_error:
             self._last_session_error = error
-            self.feedback.push_toast("Network notice", error, BAD, duration=4.8)
-        if error.strip().lower() == "room is full":
+            self.feedback.push_toast("Notice", self._friendly_session_error(error), BAD, duration=4.8)
+            self._session_error_clear_at = 0.0 if persistent else monotonic() + 4.8
+        elif self._session_error_clear_at and monotonic() >= self._session_error_clear_at:
+            self.session.error = None
+            self._last_session_error = None
+            self._session_error_clear_at = 0.0
+            return
+        if is_online and error.strip().lower() == "room is full":
             self._go_menu()
-            self.notice = "room is full"
-            self.notice_overlay = "room is full"
-        elif "lost connection" in error.lower():
-            self.notice = error
+            self.notice = "That room is full."
+            self.notice_overlay = "That room is full."
+        elif is_online and "lost connection" in error.lower():
+            self.notice = self._friendly_session_error(error)
+
+    def _friendly_session_error(self, error: str) -> str:
+        normalized = error.strip().lower()
+        if normalized == "room not found":
+            return "That room does not exist. Check the code and try again."
+        if normalized == "room is full":
+            return "That room is full."
+        if "lost connection" in normalized:
+            return "Connection lost. Please return to the menu and try again."
+        if "legal card" in normalized:
+            return "You still have a playable card."
+        if "already called uno" in normalized:
+            return "UNO was already called."
+        if "does not have uno" in normalized:
+            return "That player does not have one card."
+        if "already in a room" in normalized:
+            return "You are already in a room."
+        if "name already taken" in normalized:
+            return "That name is already in this room."
+        return error or "Something went wrong."
 
     def _draw_notice_overlay(self) -> None:
         if not self.notice_overlay or self.screen is None:

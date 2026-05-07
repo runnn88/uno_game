@@ -49,7 +49,8 @@ class RelayRoomDirectory:
         if len([player for player in room.state.players if player.connected]) >= room.max_players:
             raise ValueError("room is full")
         player_id = f"p{len(room.state.players) + 1}"
-        room.state.players.append(Player(player_id, self._unique_name(room, name, len(room.state.players) + 1)))
+        player_name = self._join_name(room, name, len(room.state.players) + 1)
+        room.state.players.append(Player(player_id, player_name))
         room.clients[conn] = player_id
         self.client_rooms[conn] = room.code
         return room
@@ -61,15 +62,12 @@ class RelayRoomDirectory:
         room = self.rooms[room_code]
         player_id = room.clients.pop(conn, None)
         if player_id is not None:
+            player_name = self._player_name(room, player_id)
             if room.state.phase in {GamePhase.MENU, GamePhase.LOBBY}:
                 self._remove_lobby_player(room, player_id)
             else:
-                try:
-                    room.state.player_by_id(player_id).connected = False
-                except ValueError:
-                    pass
-            if room.state.phase == GamePhase.PLAYING:
-                self._repair_turn_after_disconnect(room, player_id)
+                self._remove_active_player(room, player_id)
+            self._set_room_notice(room, f"{player_name} left the room.")
         if not room.clients:
             self.rooms.pop(room_code, None)
             return None
@@ -97,6 +95,42 @@ class RelayRoomDirectory:
         if room.host_player_id == player_id and room.clients:
             room.host_player_id = next(iter(room.clients.values()))
 
+    def _remove_active_player(self, room: RelayRoom, player_id: str) -> None:
+        players = room.state.players
+        leaving_index = next((index for index, player in enumerate(players) if player.id == player_id), None)
+        if leaving_index is None:
+            return
+        was_current = leaving_index == room.state.turn.current_player_index
+        room.state.players = [player for player in players if player.id != player_id]
+        room.state.reaction.responders = [responder for responder in room.state.reaction.responders if responder != player_id]
+        room.state.uno_protected_player_ids.discard(player_id)
+        remaining = room.state.players
+        if not remaining:
+            return
+        if len(remaining) == 1 and room.state.phase == GamePhase.PLAYING:
+            room.state.winner_id = remaining[0].id
+            room.state.phase = GamePhase.ENDED
+            room.state.turn.current_player_index = 0
+            return
+        if leaving_index < room.state.turn.current_player_index:
+            room.state.turn.current_player_index -= 1
+        elif was_current and room.state.turn.current_player_index >= len(remaining):
+            room.state.turn.current_player_index = 0
+        elif room.state.turn.current_player_index >= len(remaining):
+            room.state.turn.current_player_index = len(remaining) - 1
+        if room.host_player_id == player_id and room.clients:
+            room.host_player_id = next(iter(room.clients.values()))
+
+    def _player_name(self, room: RelayRoom, player_id: str) -> str:
+        try:
+            return room.state.player_by_id(player_id).name
+        except ValueError:
+            return "A player"
+
+    def _set_room_notice(self, room: RelayRoom, message: str) -> None:
+        room.state.room_notice = message
+        room.state.room_notice_sequence += 1
+
     def _new_code(self) -> str:
         alphabet = ascii_uppercase + digits
         while True:
@@ -106,9 +140,21 @@ class RelayRoomDirectory:
 
     def _clean_name(self, name: str, index: int) -> str:
         cleaned = str(name).strip()[:18]
-        if cleaned.strip().lower() in {"", "host", "player", "player 0"}:
+        if self._is_generic_name(cleaned):
             return f"Player {index}"
         return cleaned
+
+    def _join_name(self, room: RelayRoom, name: str, index: int) -> str:
+        cleaned = self._clean_name(name, index)
+        if self._is_generic_name(str(name).strip()[:18]):
+            return self._unique_name(room, name, index)
+        existing = {player.name.strip().lower() for player in room.state.players if player.connected}
+        if cleaned.strip().lower() in existing:
+            raise ValueError("Name already taken")
+        return cleaned
+
+    def _is_generic_name(self, name: str) -> bool:
+        return name.strip().lower() in {"", "host", "player", "player 0"}
 
     def _unique_name(self, room: RelayRoom, name: str, index: int) -> str:
         base = self._clean_name(name, index)

@@ -6,17 +6,18 @@ class FontManager:
         package_root = Path(__file__).resolve().parents[2]
         self.assets_root = assets_root or package_root / "assets" / "fonts"
         
-        self.font_file = "SansitaOne.ttf" 
-        
-        self._cache: dict[int, pygame.font.Font] = {}
+        self._cache: dict[tuple[str, int], pygame.font.Font] = {}
 
-    def get(self, size: int) -> pygame.font.Font:
-        if size not in self._cache:
-            path = self.assets_root / self.font_file
+    def get(self, font_name: str, size: int) -> pygame.font.Font:
+        key = (font_name, size)
+        
+        if key not in self._cache:
+            path = self.assets_root / f"{font_name}.ttf"
             
             if path.exists():
-                self._cache[size] = pygame.font.Font(str(path), size)
+                self._cache[key] = pygame.font.Font(str(path), size)
             else:
-                self._cache[size] = pygame.font.Font(None, size) 
+                print(f"Warning: Could not find font {font_name}.ttf")
+                self._cache[key] = pygame.font.Font(None, size) 
                 
-        return self._cache[size]
+        return self._cache[key]

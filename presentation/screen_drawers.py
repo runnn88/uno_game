@@ -4,6 +4,47 @@ from core import app
 from presentation.theme import ACCENT, ACCENT_2, BAD, GOOD, MUTED, PANEL, PANEL_2, TEXT
 from presentation.ui.components.settings_row import SettingsRow
 
+def draw_rich_text_wrapped(
+    surface: pygame.Surface, 
+    text_array: list[str], 
+    x: int, y: int, 
+    max_width: int, 
+    normal_font: pygame.font.Font, 
+    highlight_font: pygame.font.Font, 
+    normal_color: tuple[int, int, int], 
+    highlight_color: tuple[int, int, int], 
+    line_height: int
+) -> None:
+    """Automatically wrap text and change font/color for the important information"""
+    current_y = y
+    for paragraph in text_array:
+        current_x = x
+        chunks = paragraph.split('*')
+        
+        for i, chunk in enumerate(chunks):
+            is_highlight = (i % 2 != 0)
+            font = highlight_font if is_highlight else normal_font
+            color = highlight_color if is_highlight else normal_color
+
+            words = chunk.split(' ')
+            for j, word in enumerate(words):
+                if word == "":
+                    current_x += font.size(" ")[0]
+                    continue
+
+                text_to_render = word + (" " if j < len(words) - 1 else "")
+                word_w, _ = font.size(text_to_render)
+
+                if current_x + word_w > x + max_width and current_x > x:
+                    current_x = x
+                    current_y += line_height
+
+                surf = font.render(text_to_render, True, color)
+                surface.blit(surf, (current_x, current_y))
+                current_x += surf.get_width()
+                
+        current_y += line_height + 10 
+
 def draw_outlined_text(
     surface: pygame.Surface, 
     text: str, 
@@ -81,7 +122,7 @@ def draw_main_menu(app) -> None:
     
     app.screen.blit(rotated_ellipse, ellipse_rect.topleft)
 
-    title_font = app.fonts.get(160)
+    title_font = app.fonts.get("SansitaOne", 160)
     draw_outlined_text(
         surface=app.screen,
         text="UNO",
@@ -95,7 +136,7 @@ def draw_main_menu(app) -> None:
     )
 
     # Buttons
-    btn_font = app.fonts.get(28)
+    btn_font = app.fonts.get("SansitaOne", 28)
     app.buttons.clear()
     buttons_data = [
         ("Play", 552, 360, "choose_mode", (253, 238, 103), (253, 247, 195)),
@@ -389,7 +430,7 @@ def draw_instructions(app) -> None:
     app.buttons.clear()
     app.input_boxes.clear()
     
-    title_font = app.fonts.get(70)
+    title_font = app.fonts.get("SansitaOne", 70)
     draw_outlined_text(
         surface=app.screen,
         text="Instruction",
@@ -401,36 +442,73 @@ def draw_instructions(app) -> None:
         thickness=5                  
     )
     
-    app._add_button(28, 22, 92, 34, "Back", "menu")
+    # BUTTON BACK
+    bg_color = TEXT      
+    border_color = PANEL
+    
+    btn_rect = pygame.Rect(28, 22, 110, 56)    
+    app._add_button(btn_rect.x, btn_rect.y, btn_rect.width, btn_rect.height, "Back", "menu")
+    
+    mouse = pygame.mouse.get_pos()
+    is_hover = btn_rect.collidepoint(mouse)
+    draw_rect = btn_rect.inflate(4, 4) if is_hover else btn_rect
+    
+    pygame.draw.rect(app.screen, border_color, draw_rect.inflate(12, 12), border_radius=20)
+    
+    pygame.draw.rect(app.screen, bg_color, draw_rect, border_radius=20)
+    
+    btn_font = app.fonts.get("SansitaOne", 32)
+    text_surf = btn_font.render("Back", True, border_color)
+    app.screen.blit(text_surf, text_surf.get_rect(center=draw_rect.center))
+    normal_font = app.fonts.get("Sansita-Bold", 22)
+    highlight_font = app.fonts.get("Sansita-BoldItalic", 22)
+    highlight_color = (113, 102, 224)
 
     app._draw_panel(pygame.Rect(73, 150, 554, 532), PANEL)
-    app._draw_panel(pygame.Rect(652, 150, 554, 532), PANEL_2)
+    app._draw_panel(pygame.Rect(652, 150, 554, 532), PANEL)
+    
+    normal_font = app.fonts.get("Sansita-Bold", 22)
+    highlight_font = app.fonts.get("Sansita-BoldItalic", 22)
+    highlight_color = (113, 102, 224)
 
-    app._draw_chip("Flow", 93, 170, ACCENT_2)
-    app._draw_text("How To Play", 254, 170, TEXT, size="big")
+    app._draw_chip("Flow", 93, 170, ACCENT_2, 98, 33)
+    app._draw_text("HOW TO PLAY", 254, 170, TEXT, size="big")
     rules = [
-        "Match the discard pile by color or rank. Wild cards can be played on any color.",
-        "Click a playable card in your hand. Dimmed cards are not legal for the current turn.",
-        "If you cannot play, click Draw. After drawing, play the drawn card if it is legal or click Pass.",
-        "When a draw penalty is active, you must stack a +2 or +4 with equal or higher value, otherwise draw the penalty.",
-        "First player with no cards wins. Action cards cannot be played as your final card.",
+        "- Match the discard pile by *color or rank*. *Wild cards* can be played on any color.",
+        "- Click a playable card in your hand. *Dimmed cards are not legal* for the current turn.",
+        "- If you cannot play, click *Draw*. After drawing, play the drawn card if it is legal or click *Pass*.",
+        "- When a draw penalty is active, you must stack a *+2 or +4 with equal or higher value*, otherwise draw the penalty.",
+        "- *First player with no cards wins. Action cards cannot be played* as your final card.",
     ]
-    app._draw_wrapped_lines(rules, 93, 274, 460, 26, TEXT, size="small")
+    draw_rich_text_wrapped(
+        surface=app.screen,
+        text_array=rules,
+        x=93, y=228, max_width=510,
+        normal_font=normal_font, highlight_font=highlight_font,
+        normal_color=TEXT, highlight_color=highlight_color,
+        line_height=30
+    )
 
-    app._draw_chip("Cards", 698, 170, ACCENT)
-    app._draw_text("Card Meanings", 842, 170, TEXT, size="big")
+    app._draw_chip("Cards", 668, 170, ACCENT_2, 98, 33)
+    app._draw_text("CARD MEANINGS", 803, 170, TEXT, size="big")
     cards = [
-        "0: choose clockwise or counter-clockwise, then all players pass hands in that direction.",
-        "7: choose another player and swap hands with them.",
-        "8: starts a reaction round. Players hit React; the last or missing responder is punished.",
-        "Skip: the next player loses their turn.",
-        "Reverse: changes the turn direction.",
-        "+2: adds two cards to the pending draw penalty.",
-        "Wild: choose the active color.",
-        "Wild +4: choose the active color and adds four cards to the pending draw penalty.",
+        "- *0:* choose clockwise or counter-clockwise, then all players *pass hands* in that direction.",
+        "- *7:* choose another player and *swap hands* with them.",
+        "- *8:* starts a reaction round. Players hit *React*; the last or missing responder is *punished*.",
+        "- *Skip:* the next player *loses their turn*.",
+        "- *Reverse:* changes the turn *direction*.",
+        "- *+2:* adds *two cards* to the pending draw penalty.",
+        "- *Wild:* choose the *active color*.",
+        "- *Wild +4:* choose the active color and adds *four cards* to the pending draw penalty.",
     ]
-    app._draw_wrapped_lines(cards, 698, 340, 464, 24, TEXT, size="small")
-    app._draw_buttons()
+    draw_rich_text_wrapped(
+        surface=app.screen,
+        text_array=cards,
+        x=668, y=228, max_width=510,
+        normal_font=normal_font, highlight_font=highlight_font,
+        normal_color=TEXT, highlight_color=highlight_color,
+        line_height=30
+    )
 
 
 def draw_settings(app) -> None:
