@@ -367,7 +367,6 @@ def draw_choose_mode(app) -> None:
     )
 
     # ===== DRAW BUTTONS =====
-
     for label, x, y, w, h, action, value, bg_color, border_color in buttons_data:
         rect = pygame.Rect(x, y, w, h)
         app._add_button(x, y, w, h, label, action, value)
@@ -389,17 +388,6 @@ def draw_choose_mode(app) -> None:
             draw_rect,
             border_radius=20,
         )
-
-        # Inner highlight
-        # inner = draw_rect.inflate(-6, -6)
-
-        # pygame.draw.rect(
-        #     app.screen,
-        #     (255, 255, 255, 40),
-        #     inner,
-        #     width=2,
-        #     border_radius=16,
-        # )
 
         # Text center
         text_w, text_h = btn_font.size(label)
@@ -513,51 +501,451 @@ def draw_instructions(app) -> None:
 
 def draw_settings(app) -> None:
     assert app.screen is not None
+
     app.buttons.clear()
     app.input_boxes.clear()
+
     app._draw_background("menu_background")
-    app._draw_title("Settings")
+    # app._draw_title("Settings")
+    # =========================================
+    # TITLE
+    # =========================================
+    title_font = pygame.font.Font(
+        "assets/fonts/SansitaOne.ttf",
+        70,
+    )
+
+    title_text = title_font.render(
+        "Settings",
+        True,
+        (255, 215, 90),
+    )
+
+    title_outline = title_font.render(
+        "Settings",
+        True,
+        (0, 0, 0),
+    )
+
+    title_x = 640
+    title_y = 92
+
+    outline_size = 6
+
+    for ox in range(-outline_size, outline_size + 1):
+        for oy in range(-outline_size, outline_size + 1):
+
+            if ox == 0 and oy == 0:
+                continue
+
+            outline_rect = title_outline.get_rect(
+                center=(title_x + ox, title_y + oy)
+            )
+
+            app.screen.blit(
+                title_outline,
+                outline_rect,
+            )
+
+    title_rect = title_text.get_rect(
+        center=(title_x, title_y)
+    )
+
+    app.screen.blit(title_text, title_rect)
 
     # Main settings panel drawn as semi-transparent surface (30% black)
-    settings_panel = pygame.Rect(320, 200, 640, 400)
-    panel_surf = pygame.Surface((settings_panel.width, settings_panel.height), pygame.SRCALPHA)
-    panel_surf.fill((0, 0, 0, 76))  # 30% opaque black
-    app.screen.blit(panel_surf, settings_panel.topleft)
+    # =========================================
+    # PANEL
+    # =========================================
+    panel_width = 656
+    panel_height = 420
+
+    panel_x = (1280 - panel_width) // 2
+    panel_y = (720 - panel_height) // 2 + 66
+
+    panel_rect = pygame.Rect(
+        panel_x,
+        panel_y,
+        panel_width,
+        panel_height,
+    )
+
+    # Transparent rounded panel
+    panel_surface = pygame.Surface(
+        (panel_rect.width, panel_rect.height),
+        pygame.SRCALPHA,
+    )
+
+    pygame.draw.rect(
+        panel_surface,
+        (0, 0, 0, 76),
+        panel_surface.get_rect(),
+        border_radius=18,
+    )
+
+    pygame.draw.rect(
+        panel_surface,
+        (255, 255, 255, 18),
+        panel_surface.get_rect(),
+        width=2,
+        border_radius=18,
+    )
+
+    app.screen.blit(panel_surface, panel_rect.topleft)
+
+    # Outer border
+    pygame.draw.rect(
+        app.screen,
+        (210, 210, 210),
+        panel_rect,
+        width=3,
+        border_radius=18,
+    )
+
+    # Inner border
+    inner_panel = panel_rect.inflate(-6, -6)
+
+    pygame.draw.rect(
+        app.screen,
+        (90, 90, 90),
+        inner_panel,
+        width=2,
+        border_radius=14,
+    )
+
+    # =========================================
+    # SUBTITLE
+    # =========================================
+    subtitle_font = pygame.font.Font(
+        "assets/fonts/SansitaOne.ttf",
+        24,
+    )
+
+    subtitle = subtitle_font.render(
+        "Customize your game experience.",
+        True,
+        (120, 120, 120),
+    )
+
+    subtitle_rect = subtitle.get_rect(
+        center=(640, 150)
+    )
+
+    app.screen.blit(
+        subtitle,
+        subtitle_rect,
+    )
+    # settings_panel = pygame.Rect(320, 200, 640, 400)
+    # panel_surf = pygame.Surface((settings_panel.width, settings_panel.height), pygame.SRCALPHA)
+    # panel_surf.fill((0, 0, 0, 76))  # 30% opaque black
+    # app.screen.blit(panel_surf, settings_panel.topleft)
     
-    pygame.draw.rect(app.screen, (50, 50, 50), settings_panel, width=2, border_radius=8)
+    # pygame.draw.rect(app.screen, (50, 50, 50), settings_panel, width=2, border_radius=8)
+
+    # =========================================
+    # SETTINGS ROWS
+    # =========================================
+    btn_font = app.fonts.get("SansitaOne", 26)
+    label_font = pygame.font.Font(
+        "assets/fonts/SansitaOne.ttf",
+        30,
+    )
+
+    mouse = pygame.mouse.get_pos()
 
     rows = [
-        ("Volume", "volume", f"{int(app.user_settings.volume * 100)}%"),
-        ("Fullscreen", "fullscreen", "On" if app.user_settings.fullscreen else "Off"),
+        (
+            "Volume",
+            f"{int(app.user_settings.volume * 100)}%",
+            "volume",
+        ),
+        (
+            "Fullscreen",
+            "On" if app.user_settings.fullscreen else "Off",
+            "fullscreen",
+        ),
     ]
 
-    y = 260
-    font, small, _big = app._fonts()
+    row_y = panel_y + 90
 
-    # Draw semi-transparent overlay for each settings row
-    for label, key, value in rows:
-        row_rect = pygame.Rect(360, y - 10, 560, 60)
-        overlay = pygame.Surface((row_rect.width, row_rect.height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 0))  # 30% opaque black
-        app.screen.blit(overlay, row_rect.topleft)
+    for label, value, key in rows:
 
-        SettingsRow(row_rect, label, value).draw(app.screen, font, small)
+        # Label
+        label_text = label_font.render(
+            label,
+            True,
+            (255, 255, 255),
+        )
+
+        label_outline = label_font.render(
+            label,
+            True,
+            (0, 0, 0),
+        )
+
+        label_x = panel_x + 70
+        label_y = row_y
+
+        for ox in range(-2, 3):
+            for oy in range(-2, 3):
+
+                if ox == 0 and oy == 0:
+                    continue
+
+                app.screen.blit(
+                    label_outline,
+                    (
+                        label_x + ox,
+                        label_y + oy,
+                    ),
+                )
+
+        app.screen.blit(
+            label_text,
+            (label_x, label_y),
+        )
+
+        # Value
+        value_text = label_font.render(
+            value,
+            True,
+            (255, 215, 90),
+        )
+
+        value_outline = label_font.render(
+            value,
+            True,
+            (0, 0, 0),
+        )
+
+        value_rect = value_text.get_rect(
+            center=(640, row_y + 18)
+        )
+
+        for ox in range(-2, 3):
+            for oy in range(-2, 3):
+
+                if ox == 0 and oy == 0:
+                    continue
+
+                app.screen.blit(
+                    value_outline,
+                    value_rect.move(ox, oy),
+                )
+
+        app.screen.blit(
+            value_text,
+            value_rect,
+        )
+
+        # =====================================
+        # BUTTONS
+        # =====================================
 
         if key == "volume":
-            app._add_button(740, y, 42, 38, "-", "volume_down")
-            app._add_button(794, y, 42, 38, "+", "volume_up")
+
+            buttons_data = [
+                (
+                    "-",
+                    730,
+                    row_y,
+                    42,
+                    38,
+                    "volume_down",
+                    (253, 133, 130),
+                    (255, 200, 199),
+                ),
+                (
+                    "+",
+                    810,
+                    row_y,
+                    42,
+                    38,
+                    "volume_up",
+                    (253, 238, 103),
+                    (253, 247, 195),
+                ),
+            ]
+
         else:
-            app._add_button(740, y, 112, 38, "Toggle", f"toggle_{key}")
-        y += 80
 
-    app._add_button(380, 520, 180, 48, "Save", "save_settings")
-    app._add_button(720, 520, 180, 48, "Back", "menu")
-    # app._draw_text("Settings are saved to config/user_settings.json.", 640, 600, MUTED, center=True)
+            buttons_data = [
+                (
+                    "Toggle",
+                    730,
+                    row_y,
+                    120,
+                    42,
+                    "toggle_fullscreen",
+                    (253, 133, 130),
+                    (255, 200, 199),
+                ),
+            ]
 
+        for (
+            text,
+            x,
+            y,
+            w,
+            h,
+            action,
+            bg_color,
+            border_color,
+        ) in buttons_data:
+
+            rect = pygame.Rect(x, y, w, h)
+
+            app._add_button(
+                x,
+                y,
+                w,
+                h,
+                text,
+                action,
+            )
+
+            is_hover = rect.collidepoint(mouse)
+
+            draw_rect = (
+                rect.inflate(4, 4)
+                if is_hover
+                else rect
+            )
+
+            # Border glow
+            pygame.draw.rect(
+                app.screen,
+                border_color,
+                draw_rect.inflate(12, 12),
+                border_radius=20,
+            )
+
+            # Main button
+            pygame.draw.rect(
+                app.screen,
+                bg_color,
+                draw_rect,
+                border_radius=20,
+            )
+
+            # Text
+            text_w, text_h = btn_font.size(text)
+
+            text_x = draw_rect.centerx - text_w // 2
+            text_y = draw_rect.centery - text_h // 2
+
+            draw_outlined_text(
+                surface=app.screen,
+                text=text,
+                font=btn_font,
+                text_color=(255, 255, 255),
+                outline_color=(0, 0, 0),
+                x=text_x,
+                y=text_y,
+                thickness=2,
+            )
+
+        row_y += 100
+
+    # =========================================
+    # BOTTOM BUTTONS
+    # =========================================
+    bottom_buttons = [
+        (
+            "Save",
+            420,
+            530,
+            180,
+            52,
+            "save_settings",
+            (253, 238, 103),
+            (253, 247, 195),
+        ),
+        (
+            "Back",
+            680,
+            530,
+            180,
+            52,
+            "menu",
+            (180, 180, 180),
+            (230, 230, 230),
+        ),
+    ]
+
+    for (
+        label,
+        x,
+        y,
+        w,
+        h,
+        action,
+        bg_color,
+        border_color,
+    ) in bottom_buttons:
+
+        rect = pygame.Rect(x, y, w, h)
+
+        app._add_button(
+            x,
+            y,
+            w,
+            h,
+            label,
+            action,
+        )
+
+        is_hover = rect.collidepoint(mouse)
+
+        draw_rect = (
+            rect.inflate(4, 4)
+            if is_hover
+            else rect
+        )
+
+        pygame.draw.rect(
+            app.screen,
+            border_color,
+            draw_rect.inflate(12, 12),
+            border_radius=20,
+        )
+
+        pygame.draw.rect(
+            app.screen,
+            bg_color,
+            draw_rect,
+            border_radius=20,
+        )
+
+        text_w, text_h = btn_font.size(label)
+
+        text_x = draw_rect.centerx - text_w // 2
+        text_y = draw_rect.centery - text_h // 2
+
+        draw_outlined_text(
+            surface=app.screen,
+            text=label,
+            font=btn_font,
+            text_color=(255, 255, 255),
+            outline_color=(0, 0, 0),
+            x=text_x,
+            y=text_y,
+            thickness=2,
+        )
+
+    # =========================================
+    # NOTICE
+    # =========================================
     if app.notice:
-        app._draw_text(app.notice, 640, 640, GOOD, center=True)
+        app._draw_text(
+            app.notice,
+            640,
+            670,
+            GOOD,
+            center=True,
+        )
 
-    app._draw_buttons()
+    app._draw_notice_overlay()
 
 
 def draw_join(app, input_box_cls) -> None:
