@@ -78,6 +78,143 @@ class PresentationTests(unittest.TestCase):
         app.feedback._animate_count_changes(previous, current)
         self.assertEqual(app.card_motions, [])
 
+    def test_reaction_active_state_draws_react_button_even_if_phase_is_playing(self) -> None:
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        import pygame
+
+        from presentation.pygame_app import PygameUnoApp
+        from presentation.rendering.card_renderer import CardRenderer
+
+        class FakeSession:
+            info = "Online room"
+            room_code = "ABCD"
+            error = None
+
+            @property
+            def player_id(self):
+                return "p2"
+
+            @property
+            def can_start_game(self):
+                return False
+
+            def snapshot(self):
+                return {
+                    "phase": "playing",
+                    "current_player_id": "p1",
+                    "top_card": {"id": "red_8_0", "color": "red", "rank": "8"},
+                    "active_color": "red",
+                    "direction": "CLOCKWISE",
+                    "pending_draw": 0,
+                    "reaction": {"active": True, "source_player_id": "p1", "responders": []},
+                    "players": [
+                        {"id": "p1", "name": "Host", "card_count": 3, "hand": []},
+                        {"id": "p2", "name": "Guest", "card_count": 4, "hand": []},
+                    ],
+                }
+
+        pygame.init()
+        pygame.display.set_mode((1, 1))
+        app = PygameUnoApp()
+        app.screen = pygame.Surface((1280, 720))
+        app.card_renderer = CardRenderer()
+        app.mode = "game"
+        app.session = FakeSession()
+        app._draw_game()
+        self.assertTrue(any(button.action == "react" for button in app.buttons))
+        pygame.quit()
+
+    def test_card_click_selects_then_play_shortcut_sends_card_and_uno(self) -> None:
+        from presentation.pygame_app import PygameUnoApp
+
+        class FakeSession:
+            player_id = "p1"
+            played: list[str] = []
+            uno_called = False
+
+            def snapshot(self):
+                return {
+                    "players": [
+                        {
+                            "id": "p1",
+                            "name": "Player",
+                            "card_count": 2,
+                            "hand": [{"id": "red_5_0", "color": "red", "rank": "5"}],
+                        }
+                    ]
+                }
+
+            def play_card(self, card_id, chosen_color=None, target_player_id=None, pass_direction=None):
+                self.played.append(card_id)
+
+            def call_uno(self):
+                self.uno_called = True
+
+        app = PygameUnoApp()
+        app.mode = "game"
+        app.session = FakeSession()
+        card = {"id": "red_5_0", "color": "red", "rank": "5"}
+        app._select_card(card)
+        self.assertEqual(app.selected_card, card)
+        self.assertEqual(app.session.played, [])
+        self.assertTrue(app._handle_play_shortcut())
+        self.assertEqual(app.session.played, ["red_5_0"])
+        self.assertTrue(app.session.uno_called)
+        self.assertIsNone(app.selected_card)
+
+    def test_selected_second_last_card_changes_primary_button_to_uno(self) -> None:
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
+        import pygame
+
+        from presentation.pygame_app import PygameUnoApp
+        from presentation.rendering.card_renderer import CardRenderer
+
+        class FakeSession:
+            info = "Local hotseat"
+            error = None
+
+            @property
+            def player_id(self):
+                return "p1"
+
+            @property
+            def can_start_game(self):
+                return True
+
+            def snapshot(self):
+                return {
+                    "phase": "playing",
+                    "current_player_id": "p1",
+                    "top_card": {"id": "red_2_0", "color": "red", "rank": "2"},
+                    "active_color": "red",
+                    "direction": "CLOCKWISE",
+                    "pending_draw": 0,
+                    "reaction": {"active": False},
+                    "players": [
+                        {
+                            "id": "p1",
+                            "name": "Player",
+                            "card_count": 2,
+                            "hand": [
+                                {"id": "red_5_0", "color": "red", "rank": "5"},
+                                {"id": "blue_9_0", "color": "blue", "rank": "9"},
+                            ],
+                        }
+                    ],
+                }
+
+        pygame.init()
+        pygame.display.set_mode((1, 1))
+        app = PygameUnoApp()
+        app.screen = pygame.Surface((1280, 720))
+        app.card_renderer = CardRenderer()
+        app.mode = "game"
+        app.session = FakeSession()
+        app.selected_card = {"id": "red_5_0", "color": "red", "rank": "5"}
+        app._draw_game()
+        self.assertTrue(any(button.action == "play_selected" and button.label == "UNO" for button in app.buttons))
+        pygame.quit()
+
     def test_replay_from_ended_local_game_restarts_in_room(self) -> None:
         from config.enums import GamePhase
         from presentation.pygame_app import PygameUnoApp

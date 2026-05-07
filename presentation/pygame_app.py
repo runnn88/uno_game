@@ -64,6 +64,7 @@ class PygameUnoApp:
         self.buttons: list[Button] = []
         self.input_boxes: list[InputBox] = []
         self.hand_targets: list[tuple[pygame.Rect, dict[str, str]]] = []
+        self.selected_card: dict[str, str] | None = None
         self.pending_card: dict[str, str] | None = None
         self.pending_color: str | None = None
         self.pending_pass_direction: str | None = None
@@ -129,6 +130,9 @@ class PygameUnoApp:
                 continue
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_u:
                 if self._handle_uno_shortcut():
+                    continue
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_p:
+                if self._handle_play_shortcut():
                     continue
 
             try:
@@ -296,6 +300,7 @@ class PygameUnoApp:
         me = self.session.player_id if self.session else None
         current_name = self._player_name(players, current)
         top_card = state.get("top_card")
+        reaction_active = bool(state.get("reaction", {}).get("active"))
         
         self._draw_players(players, current, me)
         self._draw_center_pile(top_card, state.get("active_color"), state.get("pending_draw", 0))
@@ -482,6 +487,7 @@ class PygameUnoApp:
 
         my_player = next((player for player in players if player.get("id") == me), None)
         hand = list(my_player.get("hand", [])) if my_player else []
+        self._sync_selected_card(hand, state, phase == "playing" and current == me)
         self._draw_hand(hand, state, can_play=phase == "playing" and current == me)
         catchable = self._catchable_uno_player(state, me)
 
@@ -505,10 +511,30 @@ class PygameUnoApp:
                 "start",
                 enabled=can_start,
             )
-        elif phase == "reaction":
+        elif phase == "reaction" or reaction_active:
             self._draw_reaction_controls(state)
         elif phase == "playing":
-            if state.get("drew_this_turn") and current == me:
+            selected = self.selected_card if current == me else None
+            if selected is not None:
+                will_have_uno = my_player is not None and int(my_player.get("card_count", 0)) == 2
+                action_label = "UNO" if will_have_uno else "Play"
+                action_rect = pygame.Rect(1070, 612, 150, 44)
+                self._draw_cute_button(
+                    action_rect,
+                    action_label,
+                    (190, 224, 255),
+                    (120, 185, 245),
+                )
+                self._add_button(
+                    action_rect.x,
+                    action_rect.y,
+                    action_rect.width,
+                    action_rect.height,
+                    action_label,
+                    "play_selected",
+                    enabled=True
+                )
+            elif state.get("drew_this_turn") and current == me:
                 action_rect = pygame.Rect(1070, 612, 150, 44)
                 self._draw_cute_button(
                     action_rect,
@@ -979,11 +1005,15 @@ class PygameUnoApp:
             rect = pygame.Rect(start_x + index * step, y, CARD_W, CARD_H)
             playable = can_play and is_card_playable(card_data, state)
             hover = rect.collidepoint(mouse) and playable
-            draw_rect = rect.move(0, -16 if hover else 0)
-            if hover:
+            selected = self.selected_card is not None and card_data["id"] == self.selected_card.get("id")
+            lift = 28 if selected else 16 if hover else 0
+            draw_rect = rect.move(0, -lift)
+            if hover or selected:
                 halo = draw_rect.inflate(10, 10)
-                pygame.draw.rect(self.screen, ACCENT, halo, 3, border_radius=12)
+                pygame.draw.rect(self.screen, ACCENT if not selected else GOOD, halo, 3, border_radius=12)
             self.card_renderer.draw_card(self.screen, card_from_dict(card_data), draw_rect)
+            if selected:
+                self._draw_text("Chosen", draw_rect.centerx, draw_rect.y - 12, GOOD, center=True, size="small")
             if not playable:
                 dim = pygame.Surface((draw_rect.width, draw_rect.height), pygame.SRCALPHA)
                 dim.fill((0, 0, 0, 105 if can_play else 150))
@@ -995,18 +1025,38 @@ class PygameUnoApp:
         reaction = state.get("reaction", {})
         source = reaction.get("source_player_id")
         responders = set(reaction.get("responders", []))
+        players = state.get("players", [])
+        source_name = self._player_name(players, source)
         if isinstance(self.session, LocalGameSession):
             x = 1028
             y = 148
-            self._draw_text("React", x, y - 28, TEXT)
-            for player in state.get("players", []):
+            self._draw_text(f"{source_name} played an 8!", x, y - 52, TEXT, size="small")
+            self._draw_text("React fast", x, y - 28, TEXT)
+            for player in players:
                 player_id = player.get("id")
                 done = player_id in responders
-                self._add_button(x, y, 190, 38, f"{player.get('name')}", "react_player", player_id, enabled=not done)
+                rect = pygame.Rect(x, y, 190, 38)
+                self._draw_cute_button(
+                    rect,
+                    f"{player.get('name')}",
+                    (190, 224, 255) if not done else (218, 226, 230),
+                    (120, 185, 245) if not done else (176, 188, 196),
+                    font_size=22,
+                )
+                self._add_button(rect.x, rect.y, rect.width, rect.height, f"{player.get('name')}", "react_player", player_id, enabled=not done)
                 y += 46
         else:
             me = self.session.player_id if self.session else None
-            self._add_button(1070, 612, 150, 44, "React", "react", enabled=me not in responders)
+            done = me in responders
+            self._draw_text(f"{source_name} played an 8!", 1055, 520, TEXT, size="small")
+            rect = pygame.Rect(1070, 552, 150, 44)
+            self._draw_cute_button(
+                rect,
+                "React!",
+                (190, 224, 255) if not done else (218, 226, 230),
+                (120, 185, 245) if not done else (176, 188, 196),
+            )
+            self._add_button(rect.x, rect.y, rect.width, rect.height, "React!", "react", enabled=not done)
 
     def _draw_prompt(self, state: dict[str, Any]) -> None:
         if self.pending_card is None:
@@ -1506,7 +1556,10 @@ class PygameUnoApp:
             self.session.draw_card()
             self.sounds.play("card_draw")
         elif action == "pass_turn" and self.session:
+            self.selected_card = None
             self.session.pass_turn()
+        elif action == "play_selected":
+            self._play_selected_card()
         elif action == "call_uno" and self.session:
             self.session.call_uno()
             self.sounds.play("reaction_hit")
@@ -1531,19 +1584,39 @@ class PygameUnoApp:
             self._send_pending_card(str(payload))
 
     def _select_card(self, card_data: dict[str, str]) -> None:
+        if self.selected_card is not None and self.selected_card.get("id") == card_data.get("id"):
+            self.selected_card = None
+            return
+        self.selected_card = card_data
+        self.pending_card = None
+        self.pending_color = None
+        self.pending_pass_direction = None
+
+    def _play_selected_card(self) -> None:
+        if self.selected_card is None:
+            return
+        card_data = self.selected_card
         if card_data["rank"] in {"wild", "wild_draw_four", "7", "0"}:
             self.pending_card = card_data
             self.pending_color = None
             self.pending_pass_direction = None
             return
         if self.session:
+            auto_uno = self._selected_play_would_leave_uno()
             self.session.play_card(card_data["id"])
+            if auto_uno:
+                self.session.call_uno()
             self.sounds.play("card_play")
+        self.selected_card = None
 
     def _send_pending_card(self, target_player_id: str | None = None) -> None:
         if self.session and self.pending_card:
+            auto_uno = self._selected_play_would_leave_uno()
             self.session.play_card(self.pending_card["id"], self.pending_color, target_player_id, self.pending_pass_direction)
+            if auto_uno:
+                self.session.call_uno()
             self.sounds.play("card_play")
+        self.selected_card = None
         self.pending_card = None
         self.pending_color = None
         self.pending_pass_direction = None
@@ -1573,6 +1646,40 @@ class PygameUnoApp:
             self._safe_handle_action("catch_uno", target.get("id"))
             return True
         return True
+
+    def _handle_play_shortcut(self) -> bool:
+        if self.mode != "game" or self.session is None:
+            return False
+        if any(box.active for box in self.input_boxes):
+            return False
+        if self.selected_card is None or self.pending_card is not None or self.game_escape_overlay:
+            return False
+        self._safe_handle_action("play_selected", None)
+        return True
+
+    def _selected_play_would_leave_uno(self) -> bool:
+        if self.session is None or self.selected_card is None:
+            return False
+        state = self.session.snapshot()
+        if not state:
+            return False
+        me = self.session.player_id
+        my_player = self._state_player(state, me)
+        return bool(my_player and int(my_player.get("card_count", 0)) == 2)
+
+    def _sync_selected_card(self, hand: list[dict[str, str]], state: dict[str, Any], can_play: bool) -> None:
+        if self.selected_card is None:
+            return
+        selected_id = self.selected_card.get("id")
+        fresh = next((card for card in hand if card.get("id") == selected_id), None)
+        if fresh is None or not can_play or not is_card_playable(fresh, state):
+            self.selected_card = None
+            if self.pending_card is not None and self.pending_card.get("id") == selected_id:
+                self.pending_card = None
+                self.pending_color = None
+                self.pending_pass_direction = None
+            return
+        self.selected_card = fresh
 
     def _state_player(self, state: dict[str, Any], player_id: str | None) -> dict[str, Any] | None:
         return next((player for player in state.get("players", []) if player.get("id") == player_id), None)
@@ -1724,6 +1831,7 @@ class PygameUnoApp:
     def _go_menu(self) -> None:
         self._close_session()
         self.input_boxes.clear()
+        self.selected_card = None
         self.pending_card = None
         self.pending_color = None
         self.pending_pass_direction = None

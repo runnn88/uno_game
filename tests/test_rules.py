@@ -79,6 +79,29 @@ class RuleTests(unittest.TestCase):
         PlayCardHandler().handle(state, PlayCardCommand("p1", "red_0_0", pass_direction=PassDirection.CLOCKWISE))
         self.assertEqual(state.deck.top_discard.id, "red_0_0")
 
+    def test_reverse_acts_as_skip_with_two_players(self) -> None:
+        state = GameState(players=[Player("p1", "A"), Player("p2", "B")], phase=GamePhase.PLAYING)
+        state.players[0].hand.add(Card("red_reverse_0", CardColor.RED, CardRank.REVERSE))
+        state.players[0].hand.add(Card("red_1_0", CardColor.RED, CardRank.ONE))
+        state.players[1].hand.add(Card("green_1_0", CardColor.GREEN, CardRank.ONE))
+        state.deck.discard(Card("red_5_0", CardColor.RED, CardRank.FIVE))
+        state.active_color = CardColor.RED
+        PlayCardHandler().handle(state, PlayCardCommand("p1", "red_reverse_0"))
+        self.assertEqual(state.current_player.id, "p1")
+        self.assertEqual(state.turn.direction.name, "CLOCKWISE")
+
+    def test_reverse_changes_direction_with_three_players(self) -> None:
+        state = GameState(players=[Player("p1", "A"), Player("p2", "B"), Player("p3", "C")], phase=GamePhase.PLAYING)
+        state.players[0].hand.add(Card("red_reverse_0", CardColor.RED, CardRank.REVERSE))
+        state.players[0].hand.add(Card("red_1_0", CardColor.RED, CardRank.ONE))
+        state.players[1].hand.add(Card("green_1_0", CardColor.GREEN, CardRank.ONE))
+        state.players[2].hand.add(Card("blue_1_0", CardColor.BLUE, CardRank.ONE))
+        state.deck.discard(Card("red_5_0", CardColor.RED, CardRank.FIVE))
+        state.active_color = CardColor.RED
+        PlayCardHandler().handle(state, PlayCardCommand("p1", "red_reverse_0"))
+        self.assertEqual(state.current_player.id, "p3")
+        self.assertEqual(state.turn.direction.name, "COUNTER_CLOCKWISE")
+
     def test_cannot_win_with_action_card(self) -> None:
         state = GameState(players=[Player("p1", "A"), Player("p2", "B")], phase=GamePhase.PLAYING)
         state.players[0].hand.add(Card("red_skip_0", CardColor.RED, CardRank.SKIP))
@@ -87,6 +110,19 @@ class RuleTests(unittest.TestCase):
         state.active_color = CardColor.RED
         with self.assertRaises(ValueError):
             PlayCardHandler().handle(state, PlayCardCommand("p1", "red_skip_0"))
+
+    def test_last_card_seven_is_legal_but_swapped_empty_hand_wins(self) -> None:
+        state = GameState(players=[Player("p1", "A"), Player("p2", "B")], phase=GamePhase.PLAYING)
+        state.players[0].hand.add(Card("red_7_0", CardColor.RED, CardRank.SEVEN))
+        state.players[1].hand.add(Card("green_1_0", CardColor.GREEN, CardRank.ONE))
+        state.players[1].hand.add(Card("blue_2_0", CardColor.BLUE, CardRank.TWO))
+        state.deck.discard(Card("red_5_0", CardColor.RED, CardRank.FIVE))
+        state.active_color = CardColor.RED
+        PlayCardHandler().handle(state, PlayCardCommand("p1", "red_7_0", target_player_id="p2"))
+        self.assertEqual(state.phase, GamePhase.ENDED)
+        self.assertEqual(state.winner_id, "p2")
+        self.assertEqual(len(state.players[0].hand.cards), 2)
+        self.assertEqual(len(state.players[1].hand.cards), 0)
 
     def test_stack_after_plus_four_requires_plus_four(self) -> None:
         state = GameState(players=[Player("p1", "A"), Player("p2", "B")], phase=GamePhase.PLAYING)

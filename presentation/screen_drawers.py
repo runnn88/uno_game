@@ -475,10 +475,12 @@ def draw_instructions(app) -> None:
     app._draw_text("HOW TO PLAY", 254, 170, TEXT, size="big")
     rules = [
         "- Match the discard pile by *color or rank*. *Wild cards* can be played on any color.",
-        "- Click a playable card in your hand. *Dimmed cards are not legal* for the current turn.",
-        "- If you cannot play, click *Draw*. After drawing, play the drawn card if it is legal or click *Pass*.",
-        "- When a draw penalty is active, you must stack a *+2 or +4 with equal or higher value*, otherwise draw the penalty.",
-        "- *First player with no cards wins. Action cards cannot be played* as your final card.",
+        "- Click a playable card to *choose it*, then press *Play* or *P*. Dimmed cards are not legal.",
+        "- If you cannot play, click *Draw*. After drawing, play the drawn card if legal or click *Pass*.",
+        "- With a draw penalty, stack a *+2 or +4 with equal or higher value*, otherwise draw it.",
+        "- *Number cards can finish the game*. Final action cards are blocked, except *7* can be final.",
+        "- If final *7* swaps your empty hand away, the player who receives *zero cards wins*.",
+        "- Press *U* to call UNO for yourself or catch another player who forgot.",
     ]
     draw_rich_text_wrapped(
         surface=app.screen,
@@ -496,7 +498,7 @@ def draw_instructions(app) -> None:
         "- *7:* choose another player and *swap hands* with them.",
         "- *8:* starts a reaction round. Players hit *React*; the last or missing responder is *punished*.",
         "- *Skip:* the next player *loses their turn*.",
-        "- *Reverse:* changes the turn *direction*.",
+        "- *Reverse:* changes direction. With *2 players*, it acts like *Skip* instead.",
         "- *+2:* adds *two cards* to the pending draw penalty.",
         "- *Wild:* choose the *active color*.",
         "- *Wild +4:* choose the active color and adds *four cards* to the pending draw penalty.",
