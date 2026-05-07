@@ -16,4 +16,4 @@ class SettingsRow:
         surface.blit(font.render(self.label, True, (255, 255, 255)), (self.rect.x + 24, self.rect.y + 12))
         color = GOOD if self.value == "On" else MUTED
         
-        Chip(self.value, pygame.Rect(self.rect.x + 246, self.rect.y + 5, 98, 33), color).draw(surface, small)
+        Chip(self.value, pygame.Rect(self.rect.x + 200, self.rect.y + 8, 98, 33), color).draw(surface, small)

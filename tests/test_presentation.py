@@ -162,6 +162,30 @@ class PresentationTests(unittest.TestCase):
         self.assertTrue(app.session.uno_called)
         self.assertIsNone(app.selected_card)
 
+    def test_start_game_clears_selected_card_and_prompt_state(self) -> None:
+        from presentation.pygame_app import PygameUnoApp
+
+        class FakeSession:
+            started = False
+
+            def start_game(self):
+                self.started = True
+
+        app = PygameUnoApp()
+        app.session = FakeSession()
+        app.selected_card = {"id": "red_5_0", "color": "red", "rank": "5"}
+        app.pending_card = {"id": "wild_0", "color": "wild", "rank": "wild"}
+        app.pending_color = "red"
+        app.pending_pass_direction = "clockwise"
+        app.hand_targets = [(object(), {})]
+        app.buttons = [object()]
+        app._handle_action("start", None)
+        self.assertTrue(app.session.started)
+        self.assertIsNone(app.selected_card)
+        self.assertIsNone(app.pending_card)
+        self.assertEqual(app.hand_targets, [])
+        self.assertEqual(app.buttons, [])
+
     def test_selected_second_last_card_changes_primary_button_to_uno(self) -> None:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
         import pygame
@@ -251,6 +275,25 @@ class PresentationTests(unittest.TestCase):
         bot_payloads = sorted(button.payload for button in app.buttons if button.action == "bot_room")
         self.assertEqual(bot_payloads, [1, 2, 3])
         pygame.quit()
+
+    def test_input_box_supports_caret_and_ctrl_v(self) -> None:
+        import pygame
+
+        from presentation.ui.components.input_box import InputBox
+
+        box = InputBox(pygame.Rect(0, 0, 200, 44), "Name", "AC")
+        box.active = True
+        box.cursor_index = 1
+        with patch.object(InputBox, "_paste_from_clipboard", return_value="B"):
+            handled = box.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_v, mod=pygame.KMOD_CTRL, unicode=""))
+        self.assertTrue(handled)
+        self.assertEqual(box.value, "ABC")
+        self.assertEqual(box.cursor_index, 2)
+        box.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_LEFT, mod=0, unicode=""))
+        self.assertEqual(box.cursor_index, 1)
+        box.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE, mod=0, unicode=""))
+        self.assertEqual(box.value, "BC")
+        self.assertEqual(box.cursor_index, 0)
 
     def test_missing_relay_connect_does_not_block_ui_flow(self) -> None:
         import pygame

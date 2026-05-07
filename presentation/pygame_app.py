@@ -151,6 +151,7 @@ class PygameUnoApp:
             for toast in self.toasts:
                 toast.age += dt
             self._current_scene().update(dt)
+            self._sync_game_sounds()
             self._finish_pending_connection()
             self.feedback.observe()
             self._observe_room_notices()
@@ -206,11 +207,20 @@ class PygameUnoApp:
         bg_color: tuple[int, int, int],
         border_color: tuple[int, int, int],
         font_size: int = 26,
+        enabled: bool = True,
     ) -> None:
         assert self.screen is not None
 
         mouse = pygame.mouse.get_pos()
-        is_hover = rect.collidepoint(mouse)
+        is_hover = enabled and rect.collidepoint(mouse)
+        if not enabled:
+            bg_color = (220, 224, 226)
+            border_color = (170, 178, 184)
+            text_color = (112, 124, 132)
+            outline_color = (245, 247, 248)
+        else:
+            text_color = (255, 255, 255)
+            outline_color = (0, 0, 0)
 
         draw_rect = rect.inflate(4, 4) if is_hover else rect
 
@@ -230,15 +240,6 @@ class PygameUnoApp:
             border_radius=20,
         )
 
-        # Highlight
-        # pygame.draw.rect(
-        #     self.screen,
-        #     (255, 255, 255),
-        #     draw_rect,
-        #     width=3,
-        #     border_radius=20,
-        # )
-
         # Font
         font = pygame.font.Font(
             "assets/fonts/SansitaOne.ttf",
@@ -248,13 +249,13 @@ class PygameUnoApp:
         text = font.render(
             label,
             True,
-            (255, 255, 255),
+            text_color,
         )
 
         outline = font.render(
             label,
             True,
-            (0, 0, 0),
+            outline_color,
         )
 
         text_rect = text.get_rect(
@@ -377,10 +378,6 @@ class PygameUnoApp:
             center=True,
             size="small",
         )
-        # self._draw_text(f"Turn: {current_name}", 640, 34, TEXT, center=True)
-        # self._draw_text(f"Direction: {state.get('direction')}  Phase: {phase}", 640, 62, MUTED, center=True)
-        
-        # self._draw_room_code_panel()
         # =========================================
         # TOP RIGHT PANELS
         # =========================================
@@ -493,13 +490,13 @@ class PygameUnoApp:
 
         if phase in {"menu", "lobby"} or not top_card:
             can_start = bool(self.session and self.session.can_start_game)
-            # self._add_button(1070, 612, 150, 44, "Start", "start", enabled=can_start)
             action_rect = pygame.Rect(1070, 612, 150, 44)
             self._draw_cute_button(
                 action_rect,
                 "Start",
                 (120, 200, 255) if can_start else (180, 220, 255),
                 (80, 160, 255) if can_start else (140, 200, 255),
+                enabled=can_start,
             )
             
             self._add_button(
@@ -514,34 +511,23 @@ class PygameUnoApp:
         elif phase == "reaction" or reaction_active:
             self._draw_reaction_controls(state)
         elif phase == "playing":
-            selected = self.selected_card if current == me else None
-            if selected is not None:
-                will_have_uno = my_player is not None and int(my_player.get("card_count", 0)) == 2
-                action_label = "UNO" if will_have_uno else "Play"
+            is_my_turn = current == me
+            has_penalty = state.get("pending_draw", 0) > 0
+
+            # =========================================
+            # PASS BUTTON
+            # =========================================
+            if state.get("drew_this_turn") and is_my_turn:
+
                 action_rect = pygame.Rect(1070, 612, 150, 44)
-                self._draw_cute_button(
-                    action_rect,
-                    action_label,
-                    (190, 224, 255),
-                    (120, 185, 245),
-                )
-                self._add_button(
-                    action_rect.x,
-                    action_rect.y,
-                    action_rect.width,
-                    action_rect.height,
-                    action_label,
-                    "play_selected",
-                    enabled=True
-                )
-            elif state.get("drew_this_turn") and current == me:
-                action_rect = pygame.Rect(1070, 612, 150, 44)
+
                 self._draw_cute_button(
                     action_rect,
                     "Pass",
                     (255, 180, 150),
                     (255, 130, 100),
                 )
+
                 self._add_button(
                     action_rect.x,
                     action_rect.y,
@@ -551,15 +537,42 @@ class PygameUnoApp:
                     "pass_turn",
                     enabled=True
                 )
+
+            # =========================================
+            # DRAW BUTTON
+            # =========================================
             else:
-                draw_label = "Draw Penalty" if state.get("pending_draw", 0) else "Draw"
-                action_rect = pygame.Rect(1070, 612, 150, 44)
+
+                # Nếu có penalty và tới lượt mình
+                if has_penalty and is_my_turn:
+                    draw_label = "Draw Penalty"
+                    action_rect = pygame.Rect(1010, 612, 250, 44)
+
+                    bg_color = (255, 180, 150)
+                    border_color = (255, 130, 100)
+
+                # Các trường hợp còn lại
+                else:
+                    draw_label = "Draw"
+                    action_rect = pygame.Rect(1070, 612, 150, 44)
+
+                    # Đúng lượt mình → màu bình thường
+                    if is_my_turn:
+                        bg_color = (255, 180, 150)
+                        border_color = (255, 130, 100)
+
+                    # Không phải lượt mình → màu xám
+                    else:
+                        bg_color = (190, 190, 190)
+                        border_color = (140, 140, 140)
+
                 self._draw_cute_button(
                     action_rect,
                     draw_label,
-                    (255, 180, 150),
-                    (255, 130, 100),
+                    bg_color,
+                    border_color,
                 )
+
                 self._add_button(
                     action_rect.x,
                     action_rect.y,
@@ -567,7 +580,7 @@ class PygameUnoApp:
                     action_rect.height,
                     draw_label,
                     "draw",
-                    enabled=current == me
+                    enabled=is_my_turn
                 )
             protected = set(state.get("uno_protected_player_ids", ()))
             if my_player and int(my_player.get("card_count", 0)) == 1:
@@ -577,6 +590,7 @@ class PygameUnoApp:
                     "Call UNO",
                     (255, 200, 170) if me not in protected else (255, 150, 120),
                     (255, 150, 120) if me not in protected else (255, 100, 80),
+                    enabled=me not in protected,
                 )
                 self._add_button(
                     action_rect.x,
@@ -609,6 +623,7 @@ class PygameUnoApp:
         if phase == "ended":
             winner = self._player_name(players, state.get("winner_id"))
             self._draw_overlay(f"{winner} wins")
+            
             # Replay button
             can_replay = bool(self.session and self.session.can_start_game)
             replay_label = "Replay" if can_replay else "Waiting For Host"
@@ -618,6 +633,7 @@ class PygameUnoApp:
                 replay_label,
                 (120, 200, 255) if can_replay else (180, 220, 255),
                 (80, 160, 255) if can_replay else (140, 200, 255),
+                enabled=can_replay,
             )
             self._add_button(
                 replay_rect.x,
@@ -692,7 +708,6 @@ class PygameUnoApp:
             self.buttons.clear()
             self.hand_targets.clear()
             self._draw_game_escape_overlay()
-        
         
         #self._draw_buttons()
         error = self.session.error if self.session else None
@@ -864,26 +879,6 @@ class PygameUnoApp:
         )
 
         # =========================================
-        # CENTER GLOW
-        # =========================================
-        # glow = pygame.Surface((260, 260), pygame.SRCALPHA)
-
-        # pygame.draw.circle(
-        #     glow,
-        #     (255, 255, 255, 55),
-        #     (130, 130),
-        #     110,
-        # )
-
-        # self.screen.blit(
-        #     glow,
-        #     (
-        #         frame_rect.centerx - 130,
-        #         frame_rect.centery - 130,
-        #     ),
-        # )
-
-        # =========================================
         # DRAW STACK
         # =========================================
         self._draw_card_back(deck_rect)
@@ -936,50 +931,6 @@ class PygameUnoApp:
                 BAD,
                 width=72,
             )
-        # # Positions for deck and discard stacks
-        # deck_card_rect = pygame.Rect(410, 200, CARD_W, CARD_H)
-        # discard_card_rect = pygame.Rect(580, 200, CARD_W, CARD_H)
-        
-        # # Frame bounding both stacks with padding
-        # frame_padding = 24
-        # frame_left = deck_card_rect.left - frame_padding
-        # frame_top = deck_card_rect.top - frame_padding
-        # frame_width = discard_card_rect.right - deck_card_rect.left + frame_padding
-        # frame_height = deck_card_rect.height + 2 * frame_padding
-        # frame_rect = pygame.Rect(frame_left, frame_top, frame_width, frame_height)
-        
-        # # Draw transparent frame background
-        # frame_surface = pygame.Surface((frame_rect.width, frame_rect.height), pygame.SRCALPHA)
-        # frame_surface.fill((255, 255, 255, 15))
-        # self.screen.blit(frame_surface, frame_rect.topleft)
-        
-        # # Draw pink border around frame
-        # pink_border = (255, 120, 160)
-        # pygame.draw.rect(self.screen, pink_border, frame_rect, 3, border_radius=12)
-        
-        # # Draw deck card back
-        # self._draw_card_back(deck_card_rect)
-        
-        # # Draw discard card
-        # if top_card:
-        #     card = card_from_dict(top_card)
-        #     self.card_renderer.draw_card(self.screen, card, discard_card_rect)
-        # else:
-        #     self._draw_card_back(discard_card_rect)
-        
-        # # Draw active color indicator
-        # if active_color:
-        #     color = color_tuple(active_color)
-        #     circle_x = (frame_left + frame_rect.right) // 2
-        #     circle_y = frame_rect.bottom + 32
-        #     pygame.draw.circle(self.screen, color, (circle_x, circle_y), 22)
-        #     pygame.draw.circle(self.screen, TEXT, (circle_x, circle_y), 22, 2)
-        
-        # # Draw pending draw counter
-        # if pending_draw:
-        #     counter_x = (frame_left + frame_rect.right) // 2 - 36
-        #     counter_y = frame_rect.bottom + 60
-        #     self._draw_chip(f"+{pending_draw}", counter_x, counter_y, BAD, width=72)
 
     def _draw_room_code_panel(self) -> None:
         if not isinstance(self.session, OnlineGameSession) or not self.session.room_code:
@@ -1047,16 +998,37 @@ class PygameUnoApp:
                 y += 46
         else:
             me = self.session.player_id if self.session else None
-            done = me in responders
-            self._draw_text(f"{source_name} played an 8!", 1055, 520, TEXT, size="small")
-            rect = pygame.Rect(1070, 552, 150, 44)
+
+            already_reacted = me in responders
+
+            react_rect = pygame.Rect(1070, 612, 150, 44)
+
+            # Nếu đã react -> màu xám
+            if already_reacted:
+                bg_color = (190, 190, 190)
+                border_color = (140, 140, 140)
+
+            # Chưa react -> màu bình thường
+            else:
+                bg_color = (255, 180, 150)
+                border_color = (255, 130, 100)
+
             self._draw_cute_button(
-                rect,
-                "React!",
-                (190, 224, 255) if not done else (218, 226, 230),
-                (120, 185, 245) if not done else (176, 188, 196),
+                react_rect,
+                "React",
+                bg_color,
+                border_color,
             )
-            self._add_button(rect.x, rect.y, rect.width, rect.height, "React!", "react", enabled=not done)
+
+            self._add_button(
+                react_rect.x,
+                react_rect.y,
+                react_rect.width,
+                react_rect.height,
+                "React",
+                "react",
+                enabled=not already_reacted,
+            )
 
     def _draw_prompt(self, state: dict[str, Any]) -> None:
         if self.pending_card is None:
@@ -1271,14 +1243,6 @@ class PygameUnoApp:
             "host_max_up",
             enabled=max_players < 4,
         )
-        # self._draw_text("Max Players", 420, 374, TEXT)
-        # self._draw_text(str(max_players), 640, 374, MUTED, center=True)
-        # host_min_rect = pygame.Rect(710, 360, 42, 38)
-        # host_max_rect = pygame.Rect(764, 360, 42, 38)
-        # self._draw_cute_button(host_min_rect, "-", (255, 180, 150), (255, 130, 100))
-        # self._draw_cute_button(host_max_rect, "+", (120, 200, 255), (80, 160, 255))
-        # self._add_button(710, 360, 42, 38, "-", "host_max_down", enabled=max_players > max(2, connected))
-        # self._add_button(764, 360, 42, 38, "+", "host_max_up", enabled=max_players < 4)
         
         # =========================================
         # LOBBY ROW
@@ -1315,7 +1279,7 @@ class PygameUnoApp:
             toggle_rect,
             "Toggle",
             (255, 200, 170),
-            (255, 150, 120),
+            (255, 150, 120)
         )
 
         self._add_button(
@@ -1324,13 +1288,8 @@ class PygameUnoApp:
             toggle_rect.width,
             toggle_rect.height,
             "Toggle",
-            "host_toggle_lock",
+            "host_toggle_lock"
         )
-        # self._draw_text("Lobby", 420, 424, TEXT)
-        # self._draw_text("Locked" if lobby_locked else "Open", 640, 424, MUTED, center=True)
-        # toggle_rect = pygame.Rect(710, 410, 96, 38)
-        # self._draw_cute_button(toggle_rect, "Toggle", (255, 200, 170), (255, 150, 120))
-        # self._add_button(710, 410, 96, 38, "Toggle", "host_toggle_lock")
         
         # self._draw_text("These settings apply to this online room.", 640, 462, MUTED, center=True, size="small")
         close_rect = pygame.Rect(530, 515, 220, 44)
@@ -1368,27 +1327,117 @@ class PygameUnoApp:
         ]
         font, small, _big = self._fonts()
         y = 360
-        for label, key, value in rows:
-            row_rect = pygame.Rect(430, y - 10, 420, 52)
-            SettingsRow(row_rect, label, value).draw(self.screen, font, small)
+
+        for index, (label, key, value) in enumerate(rows):
+            row_rect = pygame.Rect(430, y - 8, 420, 52)
+
+            SettingsRow(row_rect, label, value).draw(
+                self.screen,
+                font,
+                small
+            )
+
+            # =========================================
+            # VOLUME BUTTONS
+            # =========================================
             if key == "volume":
-                volume_up_rect = pygame.Rect(802, y, 42, 36)
+
                 volume_down_rect = pygame.Rect(750, y, 42, 36)
-                self._draw_cute_button(volume_down_rect, "-", (255, 180, 150), (255, 130, 100))
-                self._draw_cute_button(volume_up_rect, "+", (120, 200, 255), (80, 160, 255))
-                self._add_button(750, y, 42, 36, "-", "volume_down")
-                self._add_button(802, y, 42, 36, "+", "volume_up")
+                volume_up_rect = pygame.Rect(802, y, 42, 36)
+
+                # Pink pastel
+                self._draw_cute_button(
+                    volume_down_rect,
+                    "-",
+                    (255, 185, 210),
+                    (255, 220, 235),
+                )
+
+                # Yellow pastel
+                self._draw_cute_button(
+                    volume_up_rect,
+                    "+",
+                    (255, 235, 140),
+                    (255, 248, 200),
+                )
+
+                self._add_button(
+                    750, y, 42, 36,
+                    "-",
+                    "volume_down"
+                )
+
+                self._add_button(
+                    802, y, 42, 36,
+                    "+",
+                    "volume_up"
+                )
+
+            # =========================================
+            # TOGGLE BUTTON
+            # =========================================
             else:
+
                 toggle_rect = pygame.Rect(750, y, 94, 36)
-                self._draw_cute_button(toggle_rect, "Toggle", (255, 200, 170), (255, 150, 120))
-                self._add_button(742, y, 102, 36, "Toggle", f"toggle_{key}")
+
+                self._draw_cute_button(
+                    toggle_rect,
+                    "Toggle",
+                    (255, 185, 210),      # pink
+                    (255, 220, 235),      # pastel border
+                )
+
+                self._add_button(
+                    742,
+                    y,
+                    102,
+                    36,
+                    "Toggle",
+                    f"toggle_{key}"
+                )
+
             y += 58
+
+        # =========================================
+        # BOTTOM BUTTONS
+        # =========================================
+
         back_rect = pygame.Rect(475, 514, 150, 42)
         confirm_rect = pygame.Rect(655, 514, 150, 42)
-        self._draw_cute_button(back_rect, "Back", (255, 180, 150), (255, 130, 100))
-        self._draw_cute_button(confirm_rect, "Confirm", (120, 200, 255), (80, 160, 255))
-        self._add_button(475, 514, 150, 42, "Back", "game_resume")
-        self._add_button(655, 514, 150, 42, "Confirm", "game_settings_confirm")
+
+        # Pink pastel
+        self._draw_cute_button(
+            back_rect,
+            "Back",
+            (255, 185, 210),
+            (255, 220, 235),
+        )
+
+        # Yellow pastel
+        self._draw_cute_button(
+            confirm_rect,
+            "Confirm",
+            (255, 235, 140),
+            (255, 248, 200),
+        )
+
+        self._add_button(
+            475,
+            514,
+            150,
+            42,
+            "Back",
+            "game_resume"
+        )
+
+        self._add_button(
+            655,
+            514,
+            150,
+            42,
+            "Confirm",
+            "game_settings_confirm"
+        )
 
     def _draw_leave_confirm_overlay(self) -> None:
         self._draw_overlay("Leave Room?")
@@ -1542,11 +1591,12 @@ class PygameUnoApp:
         elif action == "connect":
             self._connect_from_form()
         elif action == "start" and self.session:
+            self._clear_game_button_state()
             self.session.start_game()
             self.sounds.play("card_play")
         elif action == "replay" and self.session:
             self.game_escape_overlay = None
-            self.card_motions.clear()
+            self._clear_game_button_state()
             self.session.start_game()
             self.sounds.play("card_play")
         elif action == "draw" and self.session:
@@ -1603,7 +1653,7 @@ class PygameUnoApp:
             self.session.play_card(card_data["id"])
             if auto_uno:
                 self.session.call_uno()
-            self.sounds.play("card_play")
+            self.sounds.play("place_card")
         self.selected_card = None
 
     def _send_pending_card(self, target_player_id: str | None = None) -> None:
@@ -1612,7 +1662,7 @@ class PygameUnoApp:
             self.session.play_card(self.pending_card["id"], self.pending_color, target_player_id, self.pending_pass_direction)
             if auto_uno:
                 self.session.call_uno()
-            self.sounds.play("card_play")
+            self.sounds.play("place_card")
         self.selected_card = None
         self.pending_card = None
         self.pending_color = None
@@ -1693,6 +1743,7 @@ class PygameUnoApp:
 
     def _start_bot_room(self, bot_count: int = 1) -> None:
         self._close_session()
+        self._clear_game_button_state()
         bot_count = max(1, min(3, bot_count))
         self.session = LocalGameSession(player_count=bot_count + 1, bot_count=bot_count)
         self.game_escape_overlay = None
@@ -1765,6 +1816,7 @@ class PygameUnoApp:
         self.connecting = False
         if ok and session is not None:
             self._close_session()
+            self._clear_game_button_state()
             self.session = session
             self.notice = ""
             self.game_escape_overlay = None
@@ -1834,23 +1886,31 @@ class PygameUnoApp:
     def _go_menu(self) -> None:
         self._close_session()
         self.input_boxes.clear()
-        self.selected_card = None
-        self.pending_card = None
-        self.pending_color = None
-        self.pending_pass_direction = None
+        self._clear_game_button_state()
         self.game_escape_overlay = None
         self.host_settings_open = False
         self.connecting = False
         self._connection_id += 1
         self._last_session_error = None
+        self._last_game_state = None
         self._last_room_notice_sequence = 0
         self.notice_overlay = None
         self._set_mode("menu")
+
+    def _clear_game_button_state(self) -> None:
+        self.selected_card = None
+        self.pending_card = None
+        self.pending_color = None
+        self.pending_pass_direction = None
+        self.hand_targets.clear()
+        self.buttons.clear()
+        self.card_motions.clear()
 
     def _close_session(self) -> None:
         if self.session is not None:
             self.session.close()
         self.session = None
+        self._last_game_state = None
 
     def _set_mode(self, mode: str) -> None:
         self.mode = mode
@@ -2001,6 +2061,19 @@ class PygameUnoApp:
         self.feedback.push_toast(title, message, BAD, duration=5.0)
         if self.mode not in {"menu", "settings", "instructions"}:
             self._return_home_with_notice(message)
+
+    def _sync_game_sounds(self) -> None:
+        state = self.session.snapshot() if self.session else None
+        previous_state = self._last_game_state or {}
+        self._last_game_state = state
+
+        if state is None:
+            return
+
+        phase = state.get("phase")
+        previous_phase = previous_state.get("phase") if isinstance(previous_state, dict) else None
+        if phase == "ended" and previous_phase != "ended":
+            self.sounds.play("game_win")
 
 def card_from_dict(data: dict[str, str]) -> Card:
     return Card(data["id"], CardColor(data["color"]), CardRank(data["rank"]))
