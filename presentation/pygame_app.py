@@ -1918,6 +1918,11 @@ class PygameUnoApp:
         scene = self.scenes.get(mode)
         if scene is not None:
             scene.enter()
+            
+        if mode == "game":
+            self.sounds.stop_music()
+        else:
+            self.sounds.play_music("menu_bgm")
 
     def _return_home_with_notice(self, message: str) -> None:
         self._go_menu()
