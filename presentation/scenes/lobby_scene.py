@@ -20,5 +20,5 @@ class LobbyScene(BaseScene):
         super().handle_event(event)
 
     def draw(self, surface) -> None:
-        self.app._draw_background("table_background")
+        self.app._draw_background("menu_background")
         self.app._draw_join()

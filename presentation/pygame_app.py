@@ -44,7 +44,6 @@ from presentation.ui.components.button import Button
 from presentation.ui.components.chip import Chip
 from presentation.ui.components.input_box import InputBox
 from presentation.ui.components.panel import Panel
-from presentation.ui.components.player_panel import PlayerPanel
 from presentation.ui.components.room_code_panel import RoomCodePanel
 
 
@@ -185,12 +184,92 @@ class PygameUnoApp:
     def _draw_join(self) -> None:
         draw_join(self, InputBox)
 
+    def _draw_cute_button(
+        self,
+        rect: pygame.Rect,
+        label: str,
+        bg_color: tuple[int, int, int],
+        border_color: tuple[int, int, int],
+        font_size: int = 26,
+    ) -> None:
+        assert self.screen is not None
+
+        mouse = pygame.mouse.get_pos()
+        is_hover = rect.collidepoint(mouse)
+
+        draw_rect = rect.inflate(4, 4) if is_hover else rect
+
+        # Outer border
+        pygame.draw.rect(
+            self.screen,
+            border_color,
+            draw_rect.inflate(12, 12),
+            border_radius=20,
+        )
+
+        # Main button
+        pygame.draw.rect(
+            self.screen,
+            bg_color,
+            draw_rect,
+            border_radius=20,
+        )
+
+        # Highlight
+        pygame.draw.rect(
+            self.screen,
+            (255, 255, 255),
+            draw_rect,
+            width=3,
+            border_radius=20,
+        )
+
+        # Font
+        font = pygame.font.Font(
+            "assets/fonts/SansitaOne.ttf",
+            font_size,
+        )
+
+        text = font.render(
+            label,
+            True,
+            (255, 255, 255),
+        )
+
+        outline = font.render(
+            label,
+            True,
+            (0, 0, 0),
+        )
+
+        text_rect = text.get_rect(
+            center=draw_rect.center,
+        )
+
+        # Outline
+        thickness = 2
+
+        for ox in range(-thickness, thickness + 1):
+            for oy in range(-thickness, thickness + 1):
+
+                if ox == 0 and oy == 0:
+                    continue
+
+                self.screen.blit(
+                    outline,
+                    text_rect.move(ox, oy),
+                )
+
+        # Main text
+        self.screen.blit(text, text_rect)
+
     def _draw_game(self) -> None:
         assert self.screen is not None
         assert self.card_renderer is not None
         self.buttons.clear()
         self.input_boxes.clear()
         self.hand_targets.clear()
+
         state = self.session.snapshot() if self.session else None
         self._draw_game_frame(state)
         if state is None:
@@ -203,11 +282,240 @@ class PygameUnoApp:
         me = self.session.player_id if self.session else None
         current_name = self._player_name(players, current)
         top_card = state.get("top_card")
+        
         self._draw_players(players, current, me)
         self._draw_center_pile(top_card, state.get("active_color"), state.get("pending_draw", 0))
-        self._draw_text(f"Turn: {current_name}", 640, 34, TEXT, center=True)
-        self._draw_text(f"Direction: {state.get('direction')}  Phase: {phase}", 640, 62, MUTED, center=True)
-        self._draw_room_code_panel()
+        
+        # =========================================
+        # TOP INFO PANEL
+        # =========================================
+        info_width = 520
+        info_height = 72
+
+        info_x = (1280 - info_width) // 2
+        info_y = 8
+
+        info_rect = pygame.Rect(
+            info_x,
+            info_y,
+            info_width,
+            info_height,
+        )
+
+        # Transparent pastel yellow surface
+        info_surface = pygame.Surface(
+            (info_width, info_height),
+            pygame.SRCALPHA,
+        )
+
+        # Main pastel yellow fill
+        pygame.draw.rect(
+            info_surface,
+            (255, 245, 190, 190),
+            info_surface.get_rect(),
+            border_radius=24,
+        )
+
+        # Outer border
+        pygame.draw.rect(
+            info_surface,
+            (255, 205, 120),
+            info_surface.get_rect(),
+            width=3,
+            border_radius=24,
+        )
+
+        # Inner highlight
+        pygame.draw.rect(
+            info_surface,
+            (255, 255, 255, 90),
+            info_surface.get_rect().inflate(-8, -8),
+            width=2,
+            border_radius=20,
+        )
+
+        self.screen.blit(info_surface, info_rect.topleft)
+
+        # =========================================
+        # TURN TEXT
+        # =========================================
+        self._draw_text(
+            f"Turn: {current_name}",
+            info_rect.centerx,
+            info_rect.y + 22,
+            (215, 110, 140),
+            center=True,
+        )
+
+        # =========================================
+        # DIRECTION TEXT
+        # =========================================
+        self._draw_text(
+            f"Direction: {state.get('direction')}   Phase: {phase}",
+            info_rect.centerx,
+            info_rect.y + 48,
+            (235, 140, 170),
+            center=True,
+            size="small",
+        )
+        # self._draw_text(f"Turn: {current_name}", 640, 34, TEXT, center=True)
+        # self._draw_text(f"Direction: {state.get('direction')}  Phase: {phase}", 640, 62, MUTED, center=True)
+        
+        # self._draw_room_code_panel()
+        # =========================================
+        # TOP RIGHT PANELS
+        # =========================================
+
+        top_right_x = 1040
+        room_y = 18
+
+        # -----------------------------------------
+        # HOST SETTINGS BUTTON (HOST ONLY)
+        # -----------------------------------------
+        if (
+            self.session
+            and self.session.can_start_game
+            and phase in {"menu", "lobby", "playing"}
+        ):
+            host_rect = pygame.Rect(
+                top_right_x,
+                room_y,
+                200,
+                42,
+            )
+
+            pygame.draw.rect(
+                self.screen,
+                (255, 220, 180),
+                host_rect,
+                border_radius=18,
+            )
+
+            pygame.draw.rect(
+                self.screen,
+                (255, 170, 120),
+                host_rect,
+                width=3,
+                border_radius=18,
+            )
+
+            self._draw_text(
+                "Host Settings",
+                host_rect.centerx,
+                host_rect.centery,
+                (180, 90, 90),
+                center=True,
+                size="small",
+            )
+
+            self._add_button(
+                host_rect.x,
+                host_rect.y,
+                host_rect.width,
+                host_rect.height,
+                "",
+                "host_settings",
+            )
+
+            room_y += 56
+
+        # -----------------------------------------
+        # ROOM CODE PANEL
+        # -----------------------------------------
+        if isinstance(self.session, OnlineGameSession) and self.session.room_code:
+
+            room_rect = pygame.Rect(
+                top_right_x,
+                room_y,
+                200,
+                92,
+            )
+
+            room_surface = pygame.Surface(
+                (room_rect.width, room_rect.height),
+                pygame.SRCALPHA,
+            )
+
+            # pastel background
+            pygame.draw.rect(
+                room_surface,
+                (255, 245, 200, 210),
+                room_surface.get_rect(),
+                border_radius=22,
+            )
+
+            # border
+            pygame.draw.rect(
+                room_surface,
+                (255, 185, 130),
+                room_surface.get_rect(),
+                width=3,
+                border_radius=22,
+            )
+
+            # inner glow
+            pygame.draw.rect(
+                room_surface,
+                (255, 255, 255, 90),
+                room_surface.get_rect().inflate(-8, -8),
+                width=2,
+                border_radius=18,
+            )
+
+            self.screen.blit(room_surface, room_rect.topleft)
+
+            # title
+            self._draw_text(
+                "ROOM CODE",
+                room_rect.centerx,
+                room_rect.y + 18,
+                (210, 120, 120),
+                center=True,
+                size="small",
+            )
+
+            # code
+            self._draw_text(
+                self.session.room_code,
+                room_rect.centerx,
+                room_rect.y + 50,
+                (120, 70, 70),
+                center=True,
+                size="big",
+            )
+
+            # copy button
+            copy_rect = pygame.Rect(
+                room_rect.x + 28,
+                room_rect.bottom - 34,
+                144,
+                24,
+            )
+
+            pygame.draw.rect(
+                self.screen,
+                (255, 200, 170),
+                copy_rect,
+                border_radius=12,
+            )
+
+            self._draw_text(
+                "Copy",
+                copy_rect.centerx,
+                copy_rect.centery,
+                (140, 80, 80),
+                center=True,
+                size="small",
+            )
+
+            self._add_button(
+                copy_rect.x,
+                copy_rect.y,
+                copy_rect.width,
+                copy_rect.height,
+                "",
+                "copy_room_code",
+            )
 
         my_player = next((player for player in players if player.get("id") == me), None)
         hand = list(my_player.get("hand", [])) if my_player else []
@@ -215,7 +523,24 @@ class PygameUnoApp:
 
         if phase in {"menu", "lobby"} or not top_card:
             can_start = bool(self.session and self.session.can_start_game)
-            self._add_button(1070, 612, 150, 44, "Start", "start", enabled=can_start)
+            # self._add_button(1070, 612, 150, 44, "Start", "start", enabled=can_start)
+            action_rect = pygame.Rect(1070, 612, 150, 44)
+            self._draw_cute_button(
+                action_rect,
+                "Start",
+                (120, 200, 255) if can_start else (180, 220, 255),
+                (80, 160, 255) if can_start else (140, 200, 255),
+            )
+            
+            self._add_button(
+                action_rect.x,
+                action_rect.y,
+                action_rect.width,
+                action_rect.height,
+                "",
+                "start",
+                enabled=can_start,
+            )
         elif phase == "reaction":
             self._draw_reaction_controls(state)
         elif phase == "playing":
@@ -223,9 +548,44 @@ class PygameUnoApp:
                 self._add_button(1070, 612, 150, 44, "Pass", "pass_turn", enabled=True)
             else:
                 draw_label = "Draw Penalty" if state.get("pending_draw", 0) else "Draw"
-                self._add_button(1070, 612, 150, 44, draw_label, "draw", enabled=current == me)
+                action_rect = pygame.Rect(1030, 612, 190, 58)
+
+                self._draw_cute_button(
+                    action_rect,
+                    draw_label,
+                    (253, 238, 103),
+                    (253, 247, 195),
+                )
+
+                self._add_button(
+                    action_rect.x,
+                    action_rect.y,
+                    action_rect.width,
+                    action_rect.height,
+                    "",
+                    "draw",
+                    enabled=current == me,
+                )
+                # self._add_button(1070, 612, 150, 44, draw_label, "draw", enabled=current == me)
             if my_player and int(my_player.get("card_count", 0)) == 1:
-                self._add_button(1055, 520, 174, 44, "Call UNO", "call_uno", enabled=True)
+                uno_rect = pygame.Rect(1015, 520, 210, 58)
+
+                self._draw_cute_button(
+                    uno_rect,
+                    "CALL UNO",
+                    (253, 133, 130),
+                    (255, 200, 199),
+                )
+
+                self._add_button(
+                    uno_rect.x,
+                    uno_rect.y,
+                    uno_rect.width,
+                    uno_rect.height,
+                    "",
+                    "call_uno",
+                )
+                # self._add_button(1055, 520, 174, 44, "Call UNO", "call_uno", enabled=True)
 
         if phase == "ended":
             winner = self._player_name(players, state.get("winner_id"))
@@ -233,68 +593,320 @@ class PygameUnoApp:
             self._add_button(530, 410, 220, 46, "Back To Menu", "menu")
 
         self._draw_prompt(state)
-        if self.session and self.session.can_start_game and phase in {"menu", "lobby", "playing"}:
-            self._add_button(1055, 122, 154, 36, "Host Settings", "host_settings")
-        if self.host_settings_open:
-            self._draw_host_settings(state)
-        self._add_button(28, 22, 92, 34, "Menu", "menu")
-        self._draw_buttons()
+        # if self.session and self.session.can_start_game and phase in {"menu", "lobby", "playing"}:
+        #     self._add_button(1055, 122, 154, 36, "Host Settings", "host_settings")
+        # if self.host_settings_open:
+        #     self._draw_host_settings(state)
+
+        # =========================================
+        # MENU BUTTON
+        # =========================================
+        menu_rect = pygame.Rect(18, 14, 138, 48)
+
+        self._draw_cute_button(
+            menu_rect,
+            "Menu",
+            (245, 120, 120),
+            (255, 210, 210),
+            font_size=24,
+        )
+
+        self._add_button(
+            menu_rect.x,
+            menu_rect.y,
+            menu_rect.width,
+            menu_rect.height,
+            "",
+            "menu",
+        )
+        # Draw accumulated buttons (Start/Draw/Pass/Call UNO/React/Menu/...)
+        # self._draw_buttons()
+
         error = self.session.error if self.session else None
         if error:
             self._draw_text(error, 640, 690, BAD, center=True)
 
     def _draw_game_frame(self, state: dict[str, Any] | None) -> None:
         assert self.screen is not None
-        pygame.draw.rect(self.screen, (222, 241, 232), pygame.Rect(0, 0, 1280, 92))
-        pygame.draw.rect(self.screen, (232, 246, 239), pygame.Rect(0, 0, 1280, 46))
-        pygame.draw.line(self.screen, BORDER, (0, 92), (1280, 92), 2)
-        self._draw_panel(pygame.Rect(22, 104, 245, 470), PANEL)
-        self._draw_panel(pygame.Rect(1014, 104, 244, 470), PANEL)
-        pygame.draw.rect(self.screen, (229, 244, 237), pygame.Rect(0, 584, 1280, 136))
-        pygame.draw.line(self.screen, BORDER, (0, 584), (1280, 584), 2)
-        table = pygame.Rect(354, 124, 572, 330)
-        table_fill = pygame.Surface(table.size, pygame.SRCALPHA)
-        pygame.draw.ellipse(table_fill, (236, 249, 241, 185), table_fill.get_rect())
-        pygame.draw.ellipse(table_fill, (126, 188, 165, 90), table_fill.get_rect().inflate(-18, -18), 3)
-        pygame.draw.ellipse(table_fill, (255, 255, 255, 110), pygame.Rect(84, 24, 400, 112))
-        self.screen.blit(table_fill, table.topleft)
+        # ===== TOP BAR =====
+        # pygame.draw.rect(self.screen, (222, 241, 232), pygame.Rect(0, 0, 1280, 92))
+        # pygame.draw.rect(self.screen, (232, 246, 239), pygame.Rect(0, 0, 1280, 46))
+        # pygame.draw.line(self.screen, BORDER, (0, 92), (1280, 92), 2)
+        
+        # pygame.draw.rect(self.screen, (229, 244, 237), pygame.Rect(0, 584, 1280, 136))
+        # pygame.draw.line(self.screen, BORDER, (0, 584), (1280, 584), 2)
+        
+        # ===== TABLE CENTER =====
+        # table = pygame.Rect(314, 124, 652, 332)
+        # table_fill = pygame.Surface(table.size, pygame.SRCALPHA)
+        # pygame.draw.ellipse(table_fill, (236, 249, 241, 185), table_fill.get_rect())
+        # pygame.draw.ellipse(table_fill, (126, 188, 165, 90), table_fill.get_rect().inflate(-18, -18), 3)
+        # pygame.draw.ellipse(table_fill, (255, 255, 255, 110), pygame.Rect(84, 24, 400, 112))
+        # self.screen.blit(table_fill, table.topleft)
+        
+        # ===== SESSION INFO =====
         if self.session:
             self._draw_chip(self.session.info, 1018, 62, MUTED, width=224)
 
     def _draw_players(self, players: list[dict[str, Any]], current: str | None, me: str | None) -> None:
         assert self.screen is not None
-        self._draw_text("Players", 42, 124, TEXT)
-        y = 162
-        font, small, _big = self._fonts()
-        for player in players:
-            PlayerPanel(
-                player,
-                pygame.Rect(38, y - 8, 205, 32),
-                active=player.get("id") == current,
-                mine=player.get("id") == me,
-            ).draw(self.screen, font, small)
-            y += 38
+        ordered = players[:]
+        if me:
+            my_index = next((index for index, player in enumerate(players) if player.get("id") == me), None)
+            if my_index is not None:
+                ordered = players[my_index:] + players[:my_index]
+
+        slots = [
+            {
+                "name_rect": pygame.Rect(528, 534, 224, 34),
+                "stack_anchor": None,
+            },
+            {
+                "name_rect": pygame.Rect(78, 334, 220, 34),
+                "stack_anchor": (110, 198),
+            },
+            {
+                "name_rect": pygame.Rect(528, 114, 224, 34),
+                "stack_anchor": (640, 148),
+            },
+            {
+                "name_rect": pygame.Rect(982, 334, 220, 34),
+                "stack_anchor": (1114, 198),
+            },
+        ]
+
+        for index, slot in enumerate(slots):
+            player = ordered[index] if index < len(ordered) else None
+            active = bool(player and player.get("id") == current)
+            mine = bool(player and player.get("id") == me)
+            panel_color = (255, 240, 220) if not active else (224, 247, 235)
+            border = (255, 160, 180) if active else (255, 200, 210)
+            self._draw_panel(slot["name_rect"], panel_color, border=border)
+
+            if player is None:
+                label = f"Player {index + 1}: Empty"
+                self._draw_text(label, slot["name_rect"].centerx, slot["name_rect"].centery, MUTED, center=True, size="small")
+                continue
+
+            card_count = int(player.get("card_count", 0))
+            fallback_name = f"Player {index + 1}"
+            name = str(player.get("name") or fallback_name)
+            label = f"{name}  ({card_count})"
+            self._draw_text(label, slot["name_rect"].centerx, slot["name_rect"].centery, TEXT, center=True, size="small")
+
+            if mine:
+                continue
+
+            anchor = slot["stack_anchor"]
+            if anchor is not None:
+                self._draw_opponent_card_stack(anchor[0], anchor[1], card_count)
+
+    def _draw_opponent_card_stack(self, center_x: int, top_y: int, card_count: int) -> None:
+        small_w = max(48, int(CARD_W * 0.78))
+        small_h = max(72, int(CARD_H * 0.78))
+        visible_cards = max(1, min(6, card_count))
+        start_x = center_x - (small_w // 2)
+        for index in range(visible_cards):
+            rect = pygame.Rect(start_x + index * 4, top_y + index * 2, small_w, small_h)
+            self._draw_card_back(rect)
+        if card_count > visible_cards:
+            self._draw_chip(f"+{card_count - visible_cards}", center_x - 36, top_y + small_h + 16, MUTED, width=72)
 
     def _draw_center_pile(self, top_card: dict[str, str] | None, active_color: str | None, pending_draw: int) -> None:
         assert self.screen is not None
         assert self.card_renderer is not None
-        deck_panel = pygame.Rect(428, 166, CARD_W + 44, CARD_H + 74)
-        discard_panel = pygame.Rect(565, 166, CARD_W + 44, CARD_H + 74)
-        self._draw_panel(deck_panel, (249, 246, 235), radius=10)
-        self._draw_panel(discard_panel, (252, 244, 232), radius=10)
-        self._draw_text("Draw", deck_panel.centerx, deck_panel.y + 16, MUTED, center=True, size="small")
-        self._draw_text("Discard", discard_panel.centerx, discard_panel.y + 16, MUTED, center=True, size="small")
+
+        # =========================================
+        # CENTER FRAME
+        # =========================================
+        frame_width = 250
+        frame_height = 160
+
+        frame_x = (1280 - frame_width) // 2
+        frame_y = (720 - frame_height) // 2 - 20
+
+        frame_rect = pygame.Rect(
+            frame_x,
+            frame_y,
+            frame_width,
+            frame_height,
+        )
+
+        # Transparent surface
+        frame_surface = pygame.Surface(
+            (frame_width, frame_height),
+            pygame.SRCALPHA,
+        )
+
+        # Soft transparent pink fill
+        pygame.draw.rect(
+            frame_surface,
+            (255, 210, 230, 35),
+            frame_surface.get_rect(),
+            border_radius=24,
+        )
+
+        # Outer pink border
+        pygame.draw.rect(
+            frame_surface,
+            (255, 120, 170),
+            frame_surface.get_rect(),
+            width=2,
+            border_radius=24,
+        )
+
+        # Inner glow border
+        inner_rect = frame_surface.get_rect().inflate(-8, -8)
+
+        pygame.draw.rect(
+            frame_surface,
+            (255, 220, 235, 120),
+            inner_rect,
+            width=2,
+            border_radius=20,
+        )
+
+        self.screen.blit(frame_surface, frame_rect.topleft)
+        
+        # =========================================
+        # CARD POSITIONS
+        # =========================================
+        deck_x = frame_rect.centerx - CARD_W - 18
+        discard_x = frame_rect.centerx + 18
+
+        cards_y = frame_rect.centery - CARD_H // 2
+
+        deck_rect = pygame.Rect(
+            deck_x,
+            cards_y,
+            CARD_W,
+            CARD_H,
+        )
+
+        discard_rect = pygame.Rect(
+            discard_x,
+            cards_y,
+            CARD_W,
+            CARD_H,
+        )
+
+        # =========================================
+        # CENTER GLOW
+        # =========================================
+        # glow = pygame.Surface((260, 260), pygame.SRCALPHA)
+
+        # pygame.draw.circle(
+        #     glow,
+        #     (255, 255, 255, 55),
+        #     (130, 130),
+        #     110,
+        # )
+
+        # self.screen.blit(
+        #     glow,
+        #     (
+        #         frame_rect.centerx - 130,
+        #         frame_rect.centery - 130,
+        #     ),
+        # )
+
+        # =========================================
+        # DRAW STACK
+        # =========================================
+        self._draw_card_back(deck_rect)
+
+        # =========================================
+        # DISCARD STACK
+        # =========================================
         if top_card:
             card = card_from_dict(top_card)
-            self.card_renderer.draw_card(self.screen, card, pygame.Rect(discard_panel.x + 22, discard_panel.y + 44, CARD_W, CARD_H))
-        self._draw_card_back(pygame.Rect(deck_panel.x + 22, deck_panel.y + 44, CARD_W, CARD_H))
+
+            self.card_renderer.draw_card(
+                self.screen,
+                card,
+                discard_rect,
+            )
+
+        # =========================================
+        # ACTIVE COLOR DOT
+        # =========================================
         if active_color:
             color = color_tuple(active_color)
-            pygame.draw.circle(self.screen, color, (724, 232), 22)
-            pygame.draw.circle(self.screen, TEXT, (724, 232), 22, 2)
-            self._draw_text("Color", 724, 264, MUTED, center=True, size="small")
+
+            indicator_x = frame_rect.right + 55
+            indicator_y = frame_rect.centery - 8
+
+            pygame.draw.circle(
+                self.screen,
+                color,
+                (indicator_x, indicator_y),
+                24,
+            )
+
+            pygame.draw.circle(
+                self.screen,
+                (255, 255, 255),
+                (indicator_x, indicator_y),
+                3,
+                width=2,
+            )
+
+        # =========================================
+        # PENDING DRAW CHIP
+        # =========================================
         if pending_draw:
-            self._draw_chip(f"+{pending_draw}", 692, 300, BAD, width=72)
+
+            self._draw_chip(
+                f"+{pending_draw}",
+                frame_rect.centerx - 36,
+                frame_rect.bottom + 18,
+                BAD,
+                width=72,
+            )
+        # # Positions for deck and discard stacks
+        # deck_card_rect = pygame.Rect(410, 200, CARD_W, CARD_H)
+        # discard_card_rect = pygame.Rect(580, 200, CARD_W, CARD_H)
+        
+        # # Frame bounding both stacks with padding
+        # frame_padding = 24
+        # frame_left = deck_card_rect.left - frame_padding
+        # frame_top = deck_card_rect.top - frame_padding
+        # frame_width = discard_card_rect.right - deck_card_rect.left + frame_padding
+        # frame_height = deck_card_rect.height + 2 * frame_padding
+        # frame_rect = pygame.Rect(frame_left, frame_top, frame_width, frame_height)
+        
+        # # Draw transparent frame background
+        # frame_surface = pygame.Surface((frame_rect.width, frame_rect.height), pygame.SRCALPHA)
+        # frame_surface.fill((255, 255, 255, 15))
+        # self.screen.blit(frame_surface, frame_rect.topleft)
+        
+        # # Draw pink border around frame
+        # pink_border = (255, 120, 160)
+        # pygame.draw.rect(self.screen, pink_border, frame_rect, 3, border_radius=12)
+        
+        # # Draw deck card back
+        # self._draw_card_back(deck_card_rect)
+        
+        # # Draw discard card
+        # if top_card:
+        #     card = card_from_dict(top_card)
+        #     self.card_renderer.draw_card(self.screen, card, discard_card_rect)
+        # else:
+        #     self._draw_card_back(discard_card_rect)
+        
+        # # Draw active color indicator
+        # if active_color:
+        #     color = color_tuple(active_color)
+        #     circle_x = (frame_left + frame_rect.right) // 2
+        #     circle_y = frame_rect.bottom + 32
+        #     pygame.draw.circle(self.screen, color, (circle_x, circle_y), 22)
+        #     pygame.draw.circle(self.screen, TEXT, (circle_x, circle_y), 22, 2)
+        
+        # # Draw pending draw counter
+        # if pending_draw:
+        #     counter_x = (frame_left + frame_rect.right) // 2 - 36
+        #     counter_y = frame_rect.bottom + 60
+        #     self._draw_chip(f"+{pending_draw}", counter_x, counter_y, BAD, width=72)
 
     def _draw_room_code_panel(self) -> None:
         if not isinstance(self.session, OnlineGameSession) or not self.session.room_code:
@@ -408,7 +1020,7 @@ class PygameUnoApp:
             self.screen.fill(TABLE_GREEN)
             return
         scaled = pygame.transform.smoothscale(image, self.screen.get_size())
-        scaled.set_alpha(34 if name == "table_background" else 255)
+        scaled.set_alpha(255 if name == "table_background" else 255)
         self.screen.blit(scaled, (0, 0))
 
     def _draw_title(self, title: str) -> None:
