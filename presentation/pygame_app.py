@@ -151,6 +151,7 @@ class PygameUnoApp:
             for toast in self.toasts:
                 toast.age += dt
             self._current_scene().update(dt)
+            self._sync_game_sounds()
             self._finish_pending_connection()
             self.feedback.observe()
             self._observe_room_notices()
@@ -1639,7 +1640,7 @@ class PygameUnoApp:
             self.session.play_card(card_data["id"])
             if auto_uno:
                 self.session.call_uno()
-            self.sounds.play("card_play")
+            self.sounds.play("place_card")
         self.selected_card = None
 
     def _send_pending_card(self, target_player_id: str | None = None) -> None:
@@ -1648,7 +1649,7 @@ class PygameUnoApp:
             self.session.play_card(self.pending_card["id"], self.pending_color, target_player_id, self.pending_pass_direction)
             if auto_uno:
                 self.session.call_uno()
-            self.sounds.play("card_play")
+            self.sounds.play("place_card")
         self.selected_card = None
         self.pending_card = None
         self.pending_color = None
@@ -1879,6 +1880,7 @@ class PygameUnoApp:
         self.connecting = False
         self._connection_id += 1
         self._last_session_error = None
+        self._last_game_state = None
         self._last_room_notice_sequence = 0
         self.notice_overlay = None
         self._set_mode("menu")
@@ -1887,6 +1889,7 @@ class PygameUnoApp:
         if self.session is not None:
             self.session.close()
         self.session = None
+        self._last_game_state = None
 
     def _set_mode(self, mode: str) -> None:
         self.mode = mode
@@ -2037,6 +2040,19 @@ class PygameUnoApp:
         self.feedback.push_toast(title, message, BAD, duration=5.0)
         if self.mode not in {"menu", "settings", "instructions"}:
             self._return_home_with_notice(message)
+
+    def _sync_game_sounds(self) -> None:
+        state = self.session.snapshot() if self.session else None
+        previous_state = self._last_game_state or {}
+        self._last_game_state = state
+
+        if state is None:
+            return
+
+        phase = state.get("phase")
+        previous_phase = previous_state.get("phase") if isinstance(previous_state, dict) else None
+        if phase == "ended" and previous_phase != "ended":
+            self.sounds.play("game_win")
 
 def card_from_dict(data: dict[str, str]) -> Card:
     return Card(data["id"], CardColor(data["color"]), CardRank(data["rank"]))

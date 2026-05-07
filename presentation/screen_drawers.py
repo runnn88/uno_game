@@ -235,7 +235,7 @@ def draw_choose_mode(app) -> None:
 
     # ===== PANEL =====
     panel_width = 656
-    panel_height = 450
+    panel_height = 410
     panel_x = (1280 - panel_width) // 2
     panel_y = (720 - panel_height) // 2 + 66
 
