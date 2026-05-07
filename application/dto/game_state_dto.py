@@ -34,6 +34,8 @@ class GameStateDTO:
     uno_catch_player_id: str | None
     uno_caught_player_id: str | None
     uno_catch_sequence: int
+    room_notice: str | None
+    room_notice_sequence: int
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -55,6 +57,8 @@ class GameStateDTO:
             "uno_catch_player_id": self.uno_catch_player_id,
             "uno_caught_player_id": self.uno_caught_player_id,
             "uno_catch_sequence": self.uno_catch_sequence,
+            "room_notice": self.room_notice,
+            "room_notice_sequence": self.room_notice_sequence,
         }
 
 
@@ -92,4 +96,6 @@ def game_state_to_dto(state: GameState, viewer_player_id: str | None = None) -> 
         uno_catch_player_id=state.uno_catch_player_id,
         uno_caught_player_id=state.uno_caught_player_id,
         uno_catch_sequence=state.uno_catch_sequence,
+        room_notice=state.room_notice,
+        room_notice_sequence=state.room_notice_sequence,
     )

@@ -107,6 +107,6 @@ The pygame app delegates lifecycle work to scene classes:
 - Local hotseat supports 2, 3, or 4 players.
 - Bot modes are available from the main menu.
 - Illegal cards are dimmed in the hand before the player clicks them.
-- Smooth UI feedback, fast transitions, animated card movement, and event notifications.
+- Smooth UI feedback, fast transitions, and animated card movement.
 - Optional sounds load from `assets/sounds`; missing sounds are safe no-ops.
 - User settings are saved to `config/user_settings.json`.

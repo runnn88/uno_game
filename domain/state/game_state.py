@@ -24,6 +24,8 @@ class GameState:
     uno_catch_player_id: str | None = None
     uno_caught_player_id: str | None = None
     uno_catch_sequence: int = 0
+    room_notice: str | None = None
+    room_notice_sequence: int = 0
 
     @classmethod
     def empty(cls) -> "GameState":

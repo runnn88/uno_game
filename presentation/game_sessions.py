@@ -174,7 +174,7 @@ class OnlineGameSession:
         self._ready = threading.Event()
         self._state: dict[str, Any] | None = None
         self.error: str | None = None
-        self.info = "Connected through relay"
+        self.info = "Online room"
         self.client.connect_to_server(host, port, timeout=2.5)
         try:
             if is_host:

@@ -160,6 +160,45 @@ class NetworkTests(unittest.TestCase):
             guest.disconnect()
             relay.stop()
 
+    def test_online_player_leave_removes_them_and_notifies_room(self) -> None:
+        relay = RelayServer(host="127.0.0.1", port=0)
+        thread = threading.Thread(target=relay.start, daemon=True)
+        thread.start()
+        while relay.port == 0:
+            time.sleep(0.01)
+
+        room_codes: list[str] = []
+        host_states: list[dict] = []
+        host = GameClient(
+            lambda message: room_codes.append(str(message.payload["room_code"]))
+            if message.type.value == "ROOM_CREATED"
+            else host_states.append(message.payload)
+            if message.type.value == "GAME_STATE"
+            else None
+        )
+        guest = GameClient()
+        try:
+            host.connect_to_server("127.0.0.1", relay.port)
+            host.create_room("Host")
+            time.sleep(0.2)
+            guest.connect_to_server("127.0.0.1", relay.port)
+            guest.join_room(room_codes[-1], "Guest")
+            time.sleep(0.2)
+            host.start_game()
+            time.sleep(0.2)
+
+            guest.disconnect()
+            time.sleep(0.2)
+
+            names = [player["name"] for player in host_states[-1]["players"]]
+            self.assertEqual(names, ["Player 1"])
+            self.assertIn("Guest left the room", host_states[-1].get("room_notice", ""))
+            self.assertGreater(host_states[-1].get("room_notice_sequence", 0), 0)
+        finally:
+            host.disconnect()
+            guest.disconnect()
+            relay.stop()
+
     def test_relay_rejects_unknown_message_without_crashing(self) -> None:
         relay = RelayServer(host="127.0.0.1", port=0)
         thread = threading.Thread(target=relay.start, daemon=True)
@@ -235,6 +274,31 @@ class NetworkTests(unittest.TestCase):
 
             names = [player["name"] for player in guest_states[-1]["players"]]
             self.assertEqual(names, ["Alice", "Bob"])
+        finally:
+            host.disconnect()
+            guest.disconnect()
+            relay.stop()
+
+    def test_relay_rejects_duplicate_custom_player_name(self) -> None:
+        relay = RelayServer(host="127.0.0.1", port=0)
+        thread = threading.Thread(target=relay.start, daemon=True)
+        thread.start()
+        while relay.port == 0:
+            time.sleep(0.01)
+
+        room_codes: list[str] = []
+        errors: list[str] = []
+        host = GameClient(lambda message: room_codes.append(str(message.payload["room_code"])) if message.type.value == "ROOM_CREATED" else None)
+        guest = GameClient(lambda message: errors.append(str(message.payload.get("message", ""))) if message.type.value == "ERROR" else None)
+        try:
+            host.connect_to_server("127.0.0.1", relay.port)
+            host.create_room("Alice")
+            time.sleep(0.2)
+            guest.connect_to_server("127.0.0.1", relay.port)
+            guest.join_room(room_codes[-1], "alice")
+            time.sleep(0.2)
+
+            self.assertIn("Name already taken", errors)
         finally:
             host.disconnect()
             guest.disconnect()

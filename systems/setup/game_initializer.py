@@ -35,6 +35,8 @@ class GameInitializer:
         state.uno_catch_player_id = None
         state.uno_caught_player_id = None
         state.uno_catch_sequence = 0
+        state.room_notice = None
+        state.room_notice_sequence = 0
         state.phase = GamePhase.PLAYING
 
     def _opening_card(self, state: GameState):
