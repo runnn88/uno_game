@@ -431,11 +431,12 @@ class PygameUnoApp:
         assert self.screen is not None
         Panel(rect, color, border, radius).draw(self.screen)
 
-    def _draw_chip(self, label: str, x: int, y: int, color: tuple[int, int, int], width: int | None = None) -> None:
+    def _draw_chip(self, label: str, x: int, y: int, color: tuple[int, int, int], width: int | None = None, height: int | None = None) -> None:
         assert self.screen is not None
         _font, small, _big = self._fonts()
         chip_width = width or max(74, small.size(label)[0] + 24)
-        Chip(label, pygame.Rect(x, y, chip_width, 26), color).draw(self.screen, small)
+        chip_height = height or max(74, small.size(label)[0] + 24)
+        Chip(label, pygame.Rect(x, y, chip_width, chip_height), color).draw(self.screen, _font)
 
     def _draw_table_texture(self) -> None:
         assert self.screen is not None
@@ -546,9 +547,9 @@ class PygameUnoApp:
 
     def _fonts(self) -> tuple[pygame.font.Font, pygame.font.Font, pygame.font.Font]:
         return (
-            self.fonts.get(23),
-            self.fonts.get(17),
-            self.fonts.get(44)
+            self.fonts.get("SansitaOne",24),  #font
+            self.fonts.get("SansitaOne",17),  #small
+            self.fonts.get("SansitaOne", 30)   #big
         )
 
     def _handle_click(self, pos: tuple[int, int]) -> None:

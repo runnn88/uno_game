@@ -15,13 +15,12 @@ class Chip:
         self.color = color
 
     def draw(self, surface: pygame.Surface, font: pygame.font.Font) -> None:
-        pastel_pink = (255, 182, 193)
-        light_pink_boarder = (255, 192, 203)
-
-        fill = pygame.Surface(self.rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(fill, (*pastel_pink, 255), fill.get_rect(), border_radius=8)
-        surface.blit(fill, self.rect.topleft)
-        pygame.draw.rect(surface, light_pink_boarder, self.rect, 2, border_radius=8)
+        fill_color = (253, 238, 103)  #yellow
+        text_color = (255, 175, 1)    #orange
         
-        text = font.render(self.label, True, (255, 255, 255))
+        fill = pygame.Surface(self.rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(fill, (*fill_color, 255), fill.get_rect(), border_radius=10 )
+        surface.blit(fill, self.rect.topleft)
+        
+        text = font.render(self.label, True, text_color)
         surface.blit(text, text.get_rect(center=self.rect.center))
