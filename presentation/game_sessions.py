@@ -35,7 +35,7 @@ class LocalGameSession:
         self.bot_controller = BotPlayerController()
         self._bot_action_at = 0.0
         self.error: str | None = None
-        self.info = "Local hotseat"
+        self.info = "Bot room" if bot_count else "Local room"
         self.start_game()
 
     @property

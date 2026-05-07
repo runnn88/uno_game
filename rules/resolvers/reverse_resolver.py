@@ -11,9 +11,12 @@ class ReverseResolver(BaseResolver):
 
     def resolve(self, state: GameState, command: PlayCardCommand, card: Card) -> None:
         self.play_to_discard(state, command)
+        connected_count = len([player for player in state.players if player.connected])
+        if connected_count == 2:
+            state.turn.skip_next = True
+            return
         state.turn.direction = (
             Direction.COUNTER_CLOCKWISE
             if state.turn.direction == Direction.CLOCKWISE
             else Direction.CLOCKWISE
         )
-
