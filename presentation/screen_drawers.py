@@ -216,7 +216,7 @@ def draw_choose_mode(app) -> None:
     app._draw_panel(menu, PANEL)
 
     app._draw_text("Fast local play", 116, 170, TEXT, size="big")
-    app._draw_text("or relay-hosted rooms", 118, 218, MUTED)
+    app._draw_text("or code-based online rooms", 118, 218, MUTED)
     app._draw_chip("Hotseat", 118, 274, ACCENT_2)
     app._draw_chip("Bots", 230, 274, GOOD)
     app._draw_chip("Room Code", 315, 274, ACCENT)
@@ -236,7 +236,7 @@ def draw_choose_mode(app) -> None:
     app._add_button(x, y + 208, 402, 50, "Join Room Code", "join_room")
     app._add_button(x, y + 286, 195, 48, "Instructions", "instructions")
     app._add_button(x + 207, y + 286, 195, 48, "Settings", "settings")
-    app._draw_text("Online play uses a relay room code. Players never connect directly to the host.", 640, 676, MUTED, center=True, size="small")
+    app._draw_text("Online play uses room codes. Connection details stay out of the game UI.", 640, 676, MUTED, center=True, size="small")
     if app.notice:
         app._draw_text(app.notice, 640, 696, BAD, center=True)
     if not app.notice_overlay:

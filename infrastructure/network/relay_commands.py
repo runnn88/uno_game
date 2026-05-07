@@ -10,6 +10,7 @@ from config.constants import MAX_PLAYERS
 from config.enums import CardColor, PassDirection
 from infrastructure.network.protocol import MessageType, NetworkMessage
 from infrastructure.network.relay_room import RelayRoom
+from systems.draw.draw_manager import DrawManager
 from systems.setup.game_initializer import GameInitializer
 
 
@@ -20,6 +21,7 @@ class RelayCommandProcessor:
         self.draw_handler = DrawHandler()
         self.pass_handler = PassTurnHandler()
         self.reaction_handler = ReactionHandler()
+        self.draws = DrawManager()
 
     def process(self, room: RelayRoom, player_id: str, message: NetworkMessage) -> None:
         if message.type == MessageType.START_GAME:
@@ -34,10 +36,13 @@ class RelayCommandProcessor:
             self.pass_handler.handle(room.state, PassTurnCommand(player_id))
         elif message.type == MessageType.CALL_UNO:
             self._call_uno(room, player_id)
+        elif message.type == MessageType.CATCH_UNO:
+            self._catch_uno(room, player_id, str(message.payload.get("target_player_id", "")))
         elif message.type == MessageType.REACTION:
             self.reaction_handler.handle(room.state, ReactEventCommand(player_id))
         else:
             raise ValueError(f"Unsupported message type: {message.type.value}")
+        room.state.prune_uno_protections()
 
     def finish_reactions(self, room: RelayRoom) -> bool:
         return self.reaction_handler.finish_if_ready(room.state)
@@ -73,5 +78,26 @@ class RelayCommandProcessor:
         player = room.state.player_by_id(player_id)
         if len(player.hand.cards) != 1:
             raise ValueError("You can only call UNO with one card left")
+        room.state.prune_uno_protections()
+        if player_id in room.state.uno_protected_player_ids:
+            raise ValueError("You already called UNO")
+        room.state.uno_protected_player_ids.add(player_id)
         room.state.uno_call_player_id = player_id
         room.state.uno_call_sequence += 1
+
+    def _catch_uno(self, room: RelayRoom, catcher_id: str, target_player_id: str) -> None:
+        if not target_player_id:
+            raise ValueError("Choose a player to catch")
+        if catcher_id == target_player_id:
+            raise ValueError("You cannot catch yourself. Call UNO instead")
+        room.state.prune_uno_protections()
+        target = room.state.player_by_id(target_player_id)
+        if len(target.hand.cards) != 1:
+            raise ValueError("That player does not have UNO")
+        if target_player_id in room.state.uno_protected_player_ids:
+            raise ValueError("They already called UNO")
+        self.draws.draw_for_player(room.state, target_player_id, 2)
+        room.state.uno_catch_player_id = catcher_id
+        room.state.uno_caught_player_id = target_player_id
+        room.state.uno_catch_sequence += 1
+        room.state.prune_uno_protections()

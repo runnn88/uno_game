@@ -40,6 +40,14 @@ class PresentationTests(unittest.TestCase):
         }
         self.assertFalse(is_card_playable({"id": "red_skip_0", "color": "red", "rank": "skip"}, final_action_state))
 
+    def test_local_game_feedback_observe_does_not_require_online_viewer(self) -> None:
+        from presentation.pygame_app import PygameUnoApp
+
+        app = PygameUnoApp()
+        app._start_local(2, 0)
+        app.feedback.observe()
+        self.assertTrue(app.card_motions)
+
     def test_missing_relay_connect_does_not_block_ui_flow(self) -> None:
         import pygame
 
@@ -66,7 +74,7 @@ class PresentationTests(unittest.TestCase):
             app._finish_pending_connection()
         self.assertFalse(app.connecting)
         self.assertEqual(app.mode, "menu")
-        self.assertIn("relay did not answer", app.notice.lower())
+        self.assertIn("not responding", app.notice.lower())
 
     def test_nonexistent_room_returns_home_instead_of_game_screen(self) -> None:
         import pygame
@@ -99,7 +107,7 @@ class PresentationTests(unittest.TestCase):
             self.assertFalse(app.connecting)
             self.assertEqual(app.mode, "menu")
             self.assertIsNone(app.session)
-            self.assertIn("Room not found", app.notice)
+            self.assertIn("room does not exist", app.notice)
         finally:
             relay.stop()
             if previous_relay_url is None:
@@ -125,6 +133,68 @@ class PresentationTests(unittest.TestCase):
             app._save_settings()
         self.assertIn("Could not save settings", app.notice)
         self.assertEqual(app.toasts[-1].title, "Settings not saved")
+
+    def test_transient_online_error_clears_after_toast_window(self) -> None:
+        from presentation.pygame_app import PygameUnoApp
+        from presentation.game_sessions import OnlineGameSession
+
+        app = PygameUnoApp()
+        app.mode = "game"
+        app.session = object.__new__(OnlineGameSession)
+        app.session.error = "You have a legal card to play"
+        app._handle_session_error()
+        self.assertTrue(app.session.error)
+        app._session_error_clear_at = 0.0
+        app._handle_session_error()
+        self.assertTrue(app.session.error)
+        app._session_error_clear_at = 1.0
+        with patch("presentation.pygame_app.monotonic", return_value=2.0):
+            app._handle_session_error()
+        self.assertIsNone(app.session.error)
+
+    def test_duplicate_name_error_is_player_friendly(self) -> None:
+        from presentation.pygame_app import PygameUnoApp
+
+        app = PygameUnoApp()
+        self.assertEqual(app._connection_error_message(ValueError("Name already taken")), "That name is already in this room.")
+        self.assertEqual(app._friendly_session_error("Name already taken"), "That name is already in this room.")
+
+    def test_escape_in_game_uses_overlay_before_leaving_room(self) -> None:
+        from presentation.pygame_app import PygameUnoApp
+
+        class FakeSession:
+            error = None
+            room_code = None
+
+            @property
+            def player_id(self):
+                return "p1"
+
+            @property
+            def can_start_game(self):
+                return False
+
+            def snapshot(self):
+                return {"phase": "playing", "players": [{"id": "p1", "name": "A", "card_count": 1, "hand": []}]}
+
+            def close(self):
+                self.closed = True
+
+        app = PygameUnoApp()
+        app.mode = "game"
+        app.session = FakeSession()
+        app._handle_game_escape()
+        self.assertEqual(app.mode, "game")
+        self.assertEqual(app.game_escape_overlay, "pause")
+        app._handle_game_escape()
+        self.assertEqual(app.mode, "game")
+        self.assertIsNone(app.game_escape_overlay)
+        app._handle_action("game_leave_request", None)
+        self.assertEqual(app.game_escape_overlay, "leave_confirm")
+        app._handle_action("game_resume", None)
+        self.assertEqual(app.mode, "game")
+        app._handle_action("game_leave_confirm", None)
+        self.assertEqual(app.mode, "menu")
 
 
 if __name__ == "__main__":

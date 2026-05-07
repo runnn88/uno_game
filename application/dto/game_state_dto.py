@@ -30,6 +30,12 @@ class GameStateDTO:
     winner_id: str | None
     uno_call_player_id: str | None
     uno_call_sequence: int
+    uno_protected_player_ids: tuple[str, ...]
+    uno_catch_player_id: str | None
+    uno_caught_player_id: str | None
+    uno_catch_sequence: int
+    room_notice: str | None
+    room_notice_sequence: int
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -47,6 +53,12 @@ class GameStateDTO:
             "winner_id": self.winner_id,
             "uno_call_player_id": self.uno_call_player_id,
             "uno_call_sequence": self.uno_call_sequence,
+            "uno_protected_player_ids": self.uno_protected_player_ids,
+            "uno_catch_player_id": self.uno_catch_player_id,
+            "uno_caught_player_id": self.uno_caught_player_id,
+            "uno_catch_sequence": self.uno_catch_sequence,
+            "room_notice": self.room_notice,
+            "room_notice_sequence": self.room_notice_sequence,
         }
 
 
@@ -80,4 +92,10 @@ def game_state_to_dto(state: GameState, viewer_player_id: str | None = None) -> 
         winner_id=state.winner_id,
         uno_call_player_id=state.uno_call_player_id,
         uno_call_sequence=state.uno_call_sequence,
+        uno_protected_player_ids=tuple(sorted(state.uno_protected_player_ids)),
+        uno_catch_player_id=state.uno_catch_player_id,
+        uno_caught_player_id=state.uno_caught_player_id,
+        uno_catch_sequence=state.uno_catch_sequence,
+        room_notice=state.room_notice,
+        room_notice_sequence=state.room_notice_sequence,
     )

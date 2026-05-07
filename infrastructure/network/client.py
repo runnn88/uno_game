@@ -81,6 +81,9 @@ class GameClient:
     def call_uno(self) -> None:
         self.send(NetworkMessage.of(MessageType.CALL_UNO))
 
+    def catch_uno(self, target_player_id: str) -> None:
+        self.send(NetworkMessage.of(MessageType.CATCH_UNO, {"target_player_id": target_player_id}))
+
     def react(self) -> None:
         self.send(NetworkMessage.of(MessageType.REACTION))
 
