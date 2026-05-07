@@ -231,6 +231,7 @@ def draw_instructions(app) -> None:
         "Match the discard pile by color or rank. Wild cards can be played on any color.",
         "Click a playable card in your hand. Dimmed cards are not legal for the current turn.",
         "If you cannot play, click Draw. After drawing, play the drawn card if it is legal or click Pass.",
+        "Press U to call UNO when you have one card, or to catch another player who forgot.",
         "When a draw penalty is active, you must stack a +2 or +4 with equal or higher value, otherwise draw the penalty.",
         "First player with no cards wins. Action cards cannot be played as your final card.",
     ]

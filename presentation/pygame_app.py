@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import threading
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 import pygame
@@ -80,6 +81,7 @@ class PygameUnoApp:
         self._connection_result: tuple[int, bool, OnlineGameSession | None, str] | None = None
         self._connection_lock = threading.Lock()
         self._last_session_error: str | None = None
+        self._session_error_clear_at = 0.0
         self.assets_root = Path(__file__).resolve().parents[2] / "assets"
         self.scenes = {
             "menu": MenuScene(self),
@@ -121,6 +123,9 @@ class PygameUnoApp:
                 else:
                     self.running = False
                 continue
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_u:
+                if self._handle_uno_shortcut():
+                    continue
 
             try:
                 self._current_scene().handle_event(event)
@@ -212,6 +217,7 @@ class PygameUnoApp:
         my_player = next((player for player in players if player.get("id") == me), None)
         hand = list(my_player.get("hand", [])) if my_player else []
         self._draw_hand(hand, state, can_play=phase == "playing" and current == me)
+        catchable = self._catchable_uno_player(state, me)
 
         if phase in {"menu", "lobby"} or not top_card:
             can_start = bool(self.session and self.session.can_start_game)
@@ -224,8 +230,11 @@ class PygameUnoApp:
             else:
                 draw_label = "Draw Penalty" if state.get("pending_draw", 0) else "Draw"
                 self._add_button(1070, 612, 150, 44, draw_label, "draw", enabled=current == me)
+            protected = set(state.get("uno_protected_player_ids", ()))
             if my_player and int(my_player.get("card_count", 0)) == 1:
-                self._add_button(1055, 520, 174, 44, "Call UNO", "call_uno", enabled=True)
+                self._add_button(1055, 520, 174, 44, "Call UNO", "call_uno", enabled=me not in protected)
+            if catchable:
+                self._add_button(1055, 468, 174, 44, "Catch UNO", "catch_uno", catchable.get("id"), enabled=True)
 
         if phase == "ended":
             winner = self._player_name(players, state.get("winner_id"))
@@ -634,6 +643,9 @@ class PygameUnoApp:
         elif action == "call_uno" and self.session:
             self.session.call_uno()
             self.sounds.play("reaction_hit")
+        elif action == "catch_uno" and self.session:
+            self.session.catch_uno(str(payload))
+            self.sounds.play("reaction_hit")
         elif action == "react" and self.session:
             self.session.react()
             self.sounds.play("reaction_hit")
@@ -668,6 +680,40 @@ class PygameUnoApp:
         self.pending_card = None
         self.pending_color = None
         self.pending_pass_direction = None
+
+    def _handle_uno_shortcut(self) -> bool:
+        if self.mode != "game" or self.session is None:
+            return False
+        if any(box.active for box in self.input_boxes):
+            return False
+        state = self.session.snapshot()
+        if not state:
+            return False
+        me = self.session.player_id
+        my_player = self._state_player(state, me)
+        protected = set(state.get("uno_protected_player_ids", ()))
+        if my_player and int(my_player.get("card_count", 0)) == 1 and me not in protected:
+            self._safe_handle_action("call_uno", None)
+            return True
+        target = self._catchable_uno_player(state, me)
+        if target:
+            self._safe_handle_action("catch_uno", target.get("id"))
+            return True
+        self.feedback.push_toast("No UNO call yet", "Press U when you have one card, or when someone forgets UNO.", MUTED, duration=2.8)
+        return True
+
+    def _state_player(self, state: dict[str, Any], player_id: str | None) -> dict[str, Any] | None:
+        return next((player for player in state.get("players", []) if player.get("id") == player_id), None)
+
+    def _catchable_uno_player(self, state: dict[str, Any], viewer_id: str | None) -> dict[str, Any] | None:
+        protected = set(state.get("uno_protected_player_ids", ()))
+        for player in state.get("players", []):
+            player_id = player.get("id")
+            if player_id == viewer_id or not player.get("connected", True):
+                continue
+            if int(player.get("card_count", 0)) == 1 and player_id not in protected:
+                return player
+        return None
 
     def _start_local(self, player_count: int = 2, bot_count: int = 0) -> None:
         self._close_session()
@@ -810,20 +856,29 @@ class PygameUnoApp:
         self.notice = message
 
     def _handle_session_error(self) -> None:
-        if self.mode != "game" or not isinstance(self.session, OnlineGameSession):
+        if self.mode != "game" or self.session is None:
             return
         error = self.session.error
         if not error:
             self._last_session_error = None
+            self._session_error_clear_at = 0.0
             return
+        is_online = isinstance(self.session, OnlineGameSession)
+        persistent = is_online and (error.strip().lower() == "room is full" or "lost connection" in error.lower())
         if error != self._last_session_error:
             self._last_session_error = error
             self.feedback.push_toast("Network notice", error, BAD, duration=4.8)
-        if error.strip().lower() == "room is full":
+            self._session_error_clear_at = 0.0 if persistent else monotonic() + 4.8
+        elif self._session_error_clear_at and monotonic() >= self._session_error_clear_at:
+            self.session.error = None
+            self._last_session_error = None
+            self._session_error_clear_at = 0.0
+            return
+        if is_online and error.strip().lower() == "room is full":
             self._go_menu()
             self.notice = "room is full"
             self.notice_overlay = "room is full"
-        elif "lost connection" in error.lower():
+        elif is_online and "lost connection" in error.lower():
             self.notice = error
 
     def _draw_notice_overlay(self) -> None:

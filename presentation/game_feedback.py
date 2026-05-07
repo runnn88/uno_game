@@ -54,6 +54,7 @@ class GameFeedback:
         self._notify_top_card_change(previous, state)
         self._notify_count_changes(previous, state)
         self._notify_uno_call(previous, state)
+        self._notify_uno_catch(previous, state)
         self._notify_reaction_changes(previous, state)
         self._notify_turn_change(previous, state)
         self.host._last_game_state = state
@@ -127,6 +128,20 @@ class GameFeedback:
         title = "You called UNO!" if player_id == self._viewer_id() else f"{actor} called UNO!"
         body = "The table heard it. Finish strong." if player_id == self._viewer_id() else "Only one card remains in their hand."
         self.push_toast(title, body, GOOD if player_id == self._viewer_id() else ACCENT_2, duration=4.6)
+
+    def _notify_uno_catch(self, previous: dict[str, Any], state: dict[str, Any]) -> None:
+        if int(previous.get("uno_catch_sequence", 0)) == int(state.get("uno_catch_sequence", 0)):
+            return
+        catcher_id = state.get("uno_catch_player_id")
+        caught_id = state.get("uno_caught_player_id")
+        catcher = self._name_for(state, catcher_id)
+        caught = self._name_for(state, caught_id)
+        if catcher_id == self._viewer_id():
+            self.push_toast("Caught them!", f"{caught} forgot UNO and draws 2. Sharp eyes.", GOOD, duration=4.6)
+        elif caught_id == self._viewer_id():
+            self.push_toast("UNO caught!", f"{catcher} spotted it. You draw 2 for missing the call.", BAD, duration=4.8)
+        else:
+            self.push_toast("UNO caught!", f"{catcher} caught {caught}. They draw 2 for missing the call.", ACCENT_2, duration=4.6)
 
     def _notify_reaction_changes(self, previous: dict[str, Any], state: dict[str, Any]) -> None:
         old_reaction = previous.get("reaction", {})

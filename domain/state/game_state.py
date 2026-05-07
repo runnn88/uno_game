@@ -20,6 +20,10 @@ class GameState:
     winner_id: str | None = None
     uno_call_player_id: str | None = None
     uno_call_sequence: int = 0
+    uno_protected_player_ids: set[str] = field(default_factory=set)
+    uno_catch_player_id: str | None = None
+    uno_caught_player_id: str | None = None
+    uno_catch_sequence: int = 0
 
     @classmethod
     def empty(cls) -> "GameState":
@@ -36,4 +40,8 @@ class GameState:
             if player.id == player_id:
                 return player
         raise ValueError(f"Unknown player: {player_id}")
+
+    def prune_uno_protections(self) -> None:
+        one_card_players = {player.id for player in self.players if len(player.hand.cards) == 1}
+        self.uno_protected_player_ids.intersection_update(one_card_players)
 

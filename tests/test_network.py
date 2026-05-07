@@ -125,6 +125,41 @@ class NetworkTests(unittest.TestCase):
             guest.disconnect()
             relay.stop()
 
+    def test_relay_catches_missed_uno_and_penalizes_target(self) -> None:
+        relay = RelayServer(host="127.0.0.1", port=0)
+        thread = threading.Thread(target=relay.start, daemon=True)
+        thread.start()
+        while relay.port == 0:
+            time.sleep(0.01)
+
+        room_codes: list[str] = []
+        guest_states: list[dict] = []
+        host = GameClient(lambda message: room_codes.append(str(message.payload["room_code"])) if message.type.value == "ROOM_CREATED" else None)
+        guest = GameClient(lambda message: guest_states.append(message.payload) if message.type.value == "GAME_STATE" else None)
+        try:
+            host.connect_to_server("127.0.0.1", relay.port)
+            host.create_room("Host")
+            time.sleep(0.2)
+            guest.connect_to_server("127.0.0.1", relay.port)
+            guest.join_room(room_codes[-1], "Guest")
+            time.sleep(0.2)
+
+            room = relay.rooms[room_codes[-1]]
+            room.state.player_by_id("p1").hand.cards = [Card("red_1_0", CardColor.RED, CardRank.ONE)]
+            room.state.deck.draw_pile = [Card("blue_1_0", CardColor.BLUE, CardRank.ONE), Card("blue_2_0", CardColor.BLUE, CardRank.TWO)]
+            guest.catch_uno("p1")
+            time.sleep(0.2)
+
+            host_view = next(player for player in guest_states[-1]["players"] if player["id"] == "p1")
+            self.assertEqual(host_view["card_count"], 3)
+            self.assertEqual(guest_states[-1].get("uno_catch_player_id"), "p2")
+            self.assertEqual(guest_states[-1].get("uno_caught_player_id"), "p1")
+            self.assertEqual(guest_states[-1].get("uno_catch_sequence"), 1)
+        finally:
+            host.disconnect()
+            guest.disconnect()
+            relay.stop()
+
     def test_relay_rejects_unknown_message_without_crashing(self) -> None:
         relay = RelayServer(host="127.0.0.1", port=0)
         thread = threading.Thread(target=relay.start, daemon=True)

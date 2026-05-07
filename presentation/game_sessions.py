@@ -89,8 +89,36 @@ class LocalGameSession:
             player = self.state.player_by_id(player_id)
             if len(player.hand.cards) != 1:
                 raise ValueError("You can only call UNO with one card left")
+            self.state.prune_uno_protections()
+            if player_id in self.state.uno_protected_player_ids:
+                raise ValueError("You already called UNO")
+            self.state.uno_protected_player_ids.add(player_id)
             self.state.uno_call_player_id = player_id
             self.state.uno_call_sequence += 1
+
+        self._run(run)
+
+    def catch_uno(self, target_player_id: str) -> None:
+        player_id = self.player_id
+        if player_id is None:
+            return
+
+        def run() -> None:
+            from systems.draw.draw_manager import DrawManager
+
+            if player_id == target_player_id:
+                raise ValueError("You cannot catch yourself. Call UNO instead")
+            self.state.prune_uno_protections()
+            target = self.state.player_by_id(target_player_id)
+            if len(target.hand.cards) != 1:
+                raise ValueError("That player does not have UNO")
+            if target_player_id in self.state.uno_protected_player_ids:
+                raise ValueError("They already called UNO")
+            DrawManager().draw_for_player(self.state, target_player_id, 2)
+            self.state.uno_catch_player_id = player_id
+            self.state.uno_caught_player_id = target_player_id
+            self.state.uno_catch_sequence += 1
+            self.state.prune_uno_protections()
 
         self._run(run)
 
@@ -124,6 +152,7 @@ class LocalGameSession:
     def _run(self, fn) -> None:
         try:
             fn()
+            self.state.prune_uno_protections()
             self.error = None
         except Exception as exc:
             self.error = str(exc)
@@ -192,6 +221,9 @@ class OnlineGameSession:
     def call_uno(self) -> None:
         self._run_network("call UNO", self.client.call_uno)
 
+    def catch_uno(self, target_player_id: str) -> None:
+        self._run_network("catch UNO", lambda: self.client.catch_uno(target_player_id))
+
     def react(self, player_id: str | None = None) -> None:
         self._run_network("send your reaction", self.client.react)
 
@@ -208,6 +240,7 @@ class OnlineGameSession:
         with self._lock:
             if message.type == MessageType.GAME_STATE:
                 self._state = dict(message.payload)
+                self.error = None
             elif message.type == MessageType.ERROR:
                 self.error = str(message.payload.get("message", "Network error"))
                 self._ready.set()

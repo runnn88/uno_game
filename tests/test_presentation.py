@@ -126,6 +126,24 @@ class PresentationTests(unittest.TestCase):
         self.assertIn("Could not save settings", app.notice)
         self.assertEqual(app.toasts[-1].title, "Settings not saved")
 
+    def test_transient_online_error_clears_after_toast_window(self) -> None:
+        from presentation.pygame_app import PygameUnoApp
+        from presentation.game_sessions import OnlineGameSession
+
+        app = PygameUnoApp()
+        app.mode = "game"
+        app.session = object.__new__(OnlineGameSession)
+        app.session.error = "You have a legal card to play"
+        app._handle_session_error()
+        self.assertTrue(app.session.error)
+        app._session_error_clear_at = 0.0
+        app._handle_session_error()
+        self.assertTrue(app.session.error)
+        app._session_error_clear_at = 1.0
+        with patch("presentation.pygame_app.monotonic", return_value=2.0):
+            app._handle_session_error()
+        self.assertIsNone(app.session.error)
+
 
 if __name__ == "__main__":
     unittest.main()
