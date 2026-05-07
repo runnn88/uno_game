@@ -11,6 +11,7 @@ class SoundManager:
         self.user_enabled = True
         self.volume = 0.7
         self._sounds: dict[str, pygame.mixer.Sound] = {}
+        self.current_music: str | None = None
 
     def configure(self, user_enabled: bool, volume: float) -> None:
         self.user_enabled = user_enabled
@@ -20,6 +21,12 @@ class SoundManager:
                 sound.set_volume(self.volume)
             except pygame.error:
                 self.enabled = False
+                
+        if pygame.mixer.get_init():
+            pygame.mixer.music.set_volume(self.volume)
+            if not self.user_enabled:
+                pygame.mixer.music.stop()
+                self.current_music = None
 
     def initialize(self) -> None:
         if self.enabled or not self.user_enabled:
@@ -41,6 +48,31 @@ class SoundManager:
                 sound.play()
         except pygame.error:
             self.enabled = False
+            
+    def play_music(self, name: str) -> None:
+        if not self.user_enabled:
+            return
+            
+        if self.current_music == name and pygame.mixer.music.get_busy():
+            return 
+            
+        self.initialize()
+        if not self.enabled:
+            return
+            
+        for ext in ("wav", "ogg", "mp3"):
+            path = self.sounds_root / f"{name}.{ext}"
+            if path.exists():
+                pygame.mixer.music.load(str(path))
+                pygame.mixer.music.set_volume(self.volume)
+                pygame.mixer.music.play(loops=-1) 
+                self.current_music = name
+                return
+
+    def stop_music(self) -> None:
+        self.current_music = None
+        if self.enabled and pygame.mixer.get_init():
+            pygame.mixer.music.stop()
 
     def _load(self, name: str) -> pygame.mixer.Sound | None:
         self.initialize()
