@@ -259,6 +259,47 @@ class PresentationTests(unittest.TestCase):
         app.feedback.observe()
         self.assertTrue(app.card_motions)
 
+    def test_sound_sync_does_not_consume_draw_animation_state_delta(self) -> None:
+        from presentation.pygame_app import PygameUnoApp
+
+        class FakeSession:
+            @property
+            def player_id(self):
+                return "p1"
+
+            def snapshot(self):
+                return {
+                    "phase": "playing",
+                    "players": [
+                        {"id": "p1", "card_count": 3},
+                        {"id": "p2", "card_count": 2},
+                    ],
+                }
+
+        app = PygameUnoApp()
+        app.mode = "game"
+        app.session = FakeSession()
+        app._last_game_state = {
+            "phase": "playing",
+            "players": [
+                {"id": "p1", "card_count": 1},
+                {"id": "p2", "card_count": 2},
+            ],
+        }
+        app._sync_game_sounds()
+        app.feedback.observe()
+        self.assertTrue(app.card_motions)
+
+    def test_button_click_records_bounce_feedback(self) -> None:
+        import pygame
+
+        from presentation.pygame_app import PygameUnoApp
+
+        app = PygameUnoApp()
+        app._add_button(10, 10, 100, 40, "Noop", "dismiss_notice")
+        app._handle_click((20, 20))
+        self.assertTrue(app.button_bounces)
+
     def test_selected_second_last_card_changes_primary_button_to_uno(self) -> None:
         os.environ["SDL_VIDEODRIVER"] = "dummy"
         import pygame

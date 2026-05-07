@@ -72,9 +72,11 @@ class PygameUnoApp:
         self.host_settings_open = False
         self.transition_alpha = 255
         self.click_feedback: list[tuple[tuple[int, int], float]] = []
+        self.button_bounces: list[tuple[pygame.Rect, float]] = []
         self.card_motions: list[CardMotion] = []
         self.toasts: list[Toast] = []
         self._last_game_state: dict[str, Any] | None = None
+        self._last_sound_state: dict[str, Any] | None = None
         self.feedback = GameFeedback(self)
         self.notice = ""
         self.notice_overlay: str | None = None
@@ -144,6 +146,7 @@ class PygameUnoApp:
         try:
             self.transition_alpha = max(0, self.transition_alpha - int(950 * dt))
             self.click_feedback = [(pos, age + dt) for pos, age in self.click_feedback if age + dt < 0.24]
+            self.button_bounces = [(rect, age + dt) for rect, age in self.button_bounces if age + dt < 0.18]
             self.card_motions = [motion for motion in self.card_motions if motion.age + dt < motion.duration]
             for motion in self.card_motions:
                 motion.age += dt
@@ -222,7 +225,8 @@ class PygameUnoApp:
             text_color = (255, 255, 255)
             outline_color = (0, 0, 0)
 
-        draw_rect = rect.inflate(4, 4) if is_hover else rect
+        bounce = self._button_bounce_amount(rect)
+        draw_rect = rect.inflate(4 + bounce, 4 + bounce) if is_hover else rect.inflate(bounce, bounce)
 
         # Outer border
         pygame.draw.rect(
@@ -1003,7 +1007,7 @@ class PygameUnoApp:
         responders = set(reaction.get("responders", []))
         players = state.get("players", [])
         source_name = self._player_name(players, source)
-        if isinstance(self.session, LocalGameSession):
+        if isinstance(self.session, LocalGameSession) and getattr(self.session, "info", "") != "Bot room":
             x = 1028
             y = 148
             self._draw_text(f"{source_name} played an 8!", x, y - 52, TEXT, size="small")
@@ -1027,7 +1031,7 @@ class PygameUnoApp:
 
             already_reacted = me in responders
 
-            react_rect = pygame.Rect(1070, 612, 150, 44)
+            react_rect = pygame.Rect(1070, 552, 150, 44)
 
             # Nếu đã react -> màu xám
             if already_reacted:
@@ -1044,6 +1048,7 @@ class PygameUnoApp:
                 "React",
                 bg_color,
                 border_color,
+                enabled=not already_reacted,
             )
 
             self._add_button(
@@ -1182,6 +1187,13 @@ class PygameUnoApp:
             ripple = pygame.Surface((radius * 2 + 4, radius * 2 + 4), pygame.SRCALPHA)
             pygame.draw.circle(ripple, (*ACCENT, alpha), (radius + 2, radius + 2), radius, 2)
             self.screen.blit(ripple, (pos[0] - radius - 2, pos[1] - radius - 2))
+
+    def _button_bounce_amount(self, rect: pygame.Rect) -> int:
+        for bounce_rect, age in self.button_bounces:
+            if bounce_rect == rect:
+                progress = min(1.0, age / 0.18)
+                return int(8 * (1 - abs(0.5 - progress) * 2))
+        return 0
 
     def _draw_transition(self) -> None:
         if self.transition_alpha <= 0 or self.screen is None:
@@ -1538,6 +1550,7 @@ class PygameUnoApp:
         for button in reversed(self.buttons):
             if button.contains(pos):
                 self.click_feedback.append((pos, 0.0))
+                self.button_bounces.append((button.rect.copy(), 0.0))
                 self._safe_handle_action(button.action, button.payload)
                 return
         if self.mode == "game" and self.pending_card is None:
@@ -1932,6 +1945,7 @@ class PygameUnoApp:
         self.buttons.clear()
         self.card_motions.clear()
         self._last_game_state = None
+        self._last_sound_state = None
 
     def _close_session(self) -> None:
         if self.session is not None:
@@ -2096,8 +2110,8 @@ class PygameUnoApp:
 
     def _sync_game_sounds(self) -> None:
         state = self.session.snapshot() if self.session else None
-        previous_state = self._last_game_state or {}
-        self._last_game_state = state
+        previous_state = self._last_sound_state or {}
+        self._last_sound_state = state
 
         if state is None:
             return
