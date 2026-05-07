@@ -53,14 +53,37 @@ def draw_toasts(app) -> None:
         y += 104
 
 
-def _draw_motion_card_back(app, surface: pygame.Surface) -> None:
-    pygame.draw.rect(surface, (255, 251, 242), surface.get_rect(), border_radius=10)
-    inner = surface.get_rect().inflate(-8, -8)
-    pygame.draw.rect(surface, (188, 213, 232), inner, border_radius=8)
-    pygame.draw.ellipse(surface, ACCENT, inner.inflate(-12, -42))
-    font, _small, _big = app._fonts()
-    text = font.render("UNO", True, TEXT)
-    surface.blit(text, text.get_rect(center=surface.get_rect().center))
+_motion_card_back_cache = None
+
+
+def _draw_motion_card_back(
+    app,
+    surface: pygame.Surface,
+) -> None:
+
+    global _motion_card_back_cache
+
+    # ---------------------------------------------------------
+    # LOAD ONLY ONCE
+    # ---------------------------------------------------------
+    if _motion_card_back_cache is None:
+
+        image = pygame.image.load(
+            "assets/images/cards/Card_Back.png"
+        ).convert_alpha()
+
+        _motion_card_back_cache = pygame.transform.smoothscale(
+            image,
+            (CARD_W, CARD_H),
+        )
+
+    # ---------------------------------------------------------
+    # DRAW CARD BACK
+    # ---------------------------------------------------------
+    surface.blit(
+        _motion_card_back_cache,
+        (0, 0),
+    )
 
 
 def _draw_toast_body(app, text: str, x: int, y: int, width: int, color: tuple[int, int, int]) -> None:
